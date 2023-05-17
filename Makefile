@@ -1,9 +1,9 @@
 KDIR = /lib/modules/`uname -r`/build
 
 all:
-	make -C $(KDIR) M=`pwd` # biên dịch các module trong thư mục hiện tại
+	make -C $(KDIR) M=`pwd` # compile modules in current directory
 
-# xóa tất cả các object file có trong thư mục hiện tại
+# delete all object files in current directory
 clean:
 	#make -C $(KDIR) M=`pwd`clean 		# FAIL
 	rm -f *.o *.symvers *.order *.ko *.mod.c

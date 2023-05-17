@@ -1,5 +1,5 @@
 EXTRA_CFLAGS = -Wall	
-# Cờ -Wall cho phép trình biên dịch hiển thị tất cả các bản tin cảnh báo trong quá trình biên dịch.
+# -Wall flag allows compiler display all warning during compiling
 
 obj-m = vchar_driver.o
-# Biến obj-m chỉ ra rằng: object file sẽ được biên dịch theo kiểu kernel module.
+# obj-m: object file will be compiled as kernel module

@@ -1,8 +1,13 @@
-#include <linux/module.h> // defines maroes as module_init and module_exit
+#include <linux/module.h>	// defines maroes as module_init and module_exit
+#include <linux/fs.h>		// defines functions as allocate/release device number	
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.1"
+#define DRIVER_VERSION "0.2"
+
+struct _vchar_drv {
+	dev_t dev_num;
+} vchar_drv;
 
 
 
@@ -24,7 +29,17 @@
 /* init driver */
 static int __init vchar_driver_init(void)
 {
-	/* cap phat device number */
+	/* allocate device number */
+	int ret;
+	vchar_drv.dev_num = MKDEV(2,0);
+	ret = register_chrdev_region(vchar_drv.dev_num, 1, "vchar_device");
+	if (ret == 0)
+		printk("Register device number successfully\n");
+	else {
+		printk("Failed to register device number\n");
+		return ret;
+	}
+
 	/* tao device file */
 	/* cap phat bo nho cho cac cau truc du lieu cua driver va khoi tao */
 	/* khoi tao thiet bi vat ly */
@@ -43,7 +58,9 @@ static void __exit vchar_driver_exit(void)
 	/* giai phong thiet bi vat ly */
 	/* giai phong bo nho da cap phat cau truc du lieu cua driver */
 	/* xoa bo device file */
-	/* giai phong device number */
+
+	/* release device number */
+	unregister_chrdev_region(vchar_drv.dev_num, 1);
 
 	printk("Exit vchar driver\n");
 }
