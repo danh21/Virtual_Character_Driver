@@ -3,7 +3,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.2"
+#define DRIVER_VERSION "0.3"
 
 struct _vchar_drv {
 	dev_t dev_num;
@@ -31,12 +31,11 @@ static int __init vchar_driver_init(void)
 {
 	/* allocate device number */
 	int ret;
-	vchar_drv.dev_num = MKDEV(2,0);
-	ret = register_chrdev_region(vchar_drv.dev_num, 1, "vchar_device");
+	ret = alloc_chrdev_region(&vchar_drv.dev_num, 0, 1, "vchar_device");
 	if (ret == 0)
 		printk("Register device number successfully\n");
 	else {
-		printk("Failed to register device number\n");
+		printk("Failed to register device number dynamically\n");
 		return ret;
 	}
 
@@ -46,7 +45,7 @@ static int __init vchar_driver_init(void)
 	/* dang ky cac entry point voi kernel */
 	/* dang ky ham xu ly ngat */
 
-	printk("Initialize vchar driver successfully\n");
+	printk("Initialize virtual character driver successfully\n");
 	return 0;
 }
 
@@ -62,7 +61,7 @@ static void __exit vchar_driver_exit(void)
 	/* release device number */
 	unregister_chrdev_region(vchar_drv.dev_num, 1);
 
-	printk("Exit vchar driver\n");
+	printk("Exit virtual character driver\n");
 }
 /********************************* OS specific - END ********************************/
 
