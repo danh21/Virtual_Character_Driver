@@ -1,12 +1,15 @@
 #include <linux/module.h>	// defines maroes as module_init and module_exit
 #include <linux/fs.h>		// defines functions as allocate/release device number	
+#include <linux/device.h>	// contains functions which handle device file
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.3"
+#define DRIVER_VERSION "0.4"
 
 struct _vchar_drv {
 	dev_t dev_num;
+	struct class *dev_class;
+	struct device *dev;
 } vchar_drv;
 
 
@@ -30,16 +33,27 @@ struct _vchar_drv {
 static int __init vchar_driver_init(void)
 {
 	/* allocate device number */
-	int ret;
-	ret = alloc_chrdev_region(&vchar_drv.dev_num, 0, 1, "vchar_device");
-	if (ret == 0)
-		printk("Register device number successfully\n");
+	if (alloc_chrdev_region(&vchar_drv.dev_num, 0, 1, "vchar_device") == 0)
+		printk("Allocated device number (%d,%d) dynamically\n", MAJOR(vchar_drv.dev_num), MINOR(vchar_drv.dev_num));
 	else {
 		printk("Failed to register device number dynamically\n");
-		return ret;
+		goto failed_register_device_number;
+	}	 
+
+	/* create device class */
+	vchar_drv.dev_class = class_create(THIS_MODULE, "class_vchar_dev");
+	if (vchar_drv.dev_class == NULL) {
+		printk("Failed to create a device class\n");
+		goto failed_create_class;
 	}
 
-	/* tao device file */
+	/* create device file */
+	vchar_drv.dev = device_create(vchar_drv.dev_class, NULL, vchar_drv.dev_num, NULL, "vchar_dev");
+	if (IS_ERR(vchar_drv.dev)) {
+		printk("Failed to create a device\n");
+		goto failed_create_device;
+	}
+
 	/* cap phat bo nho cho cac cau truc du lieu cua driver va khoi tao */
 	/* khoi tao thiet bi vat ly */
 	/* dang ky cac entry point voi kernel */
@@ -47,6 +61,13 @@ static int __init vchar_driver_init(void)
 
 	printk("Initialize virtual character driver successfully\n");
 	return 0;
+
+failed_create_device:
+	class_destroy(vchar_drv.dev_class);
+failed_create_class:
+	unregister_chrdev_region(vchar_drv.dev_num, 1);
+failed_register_device_number:
+	return -1;	
 }
 
 /* exit driver */
@@ -56,7 +77,10 @@ static void __exit vchar_driver_exit(void)
 	/* huy dang ky entry point voi kernel */
 	/* giai phong thiet bi vat ly */
 	/* giai phong bo nho da cap phat cau truc du lieu cua driver */
-	/* xoa bo device file */
+
+	/* delete device file */
+	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);
+	class_destroy(vchar_drv.dev_class);
 
 	/* release device number */
 	unregister_chrdev_region(vchar_drv.dev_num, 1);
