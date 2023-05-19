@@ -2,12 +2,13 @@
 #include <linux/fs.h>		// defines functions as allocate/release device number	
 #include <linux/device.h>	// contains functions which handle device file
 #include <linux/slab.h>		// contains functions as kmalloc and kzalloc
+#include <linux/cdev.h>		// contains functions which work with cdev
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.5"
+#define DRIVER_VERSION "0.6"
 
 
 
@@ -22,6 +23,8 @@ struct _vchar_drv {
 	struct class *dev_class;
 	struct device *dev;
 	vchar_dev_t *vchar_hw;
+	struct cdev *vcdev;
+	unsigned int open_cnt;
 } vchar_drv;
 
 
@@ -61,7 +64,24 @@ void vchar_hw_exit(vchar_dev_t *hw) {
 
 
 /******************************** OS specific - START *******************************/
-/* cac ham entry points */
+/* entry points functions*/
+static int vchar_driver_open(struct inode *inode, struct file *flip) {
+	vchar_drv.open_cnt++;
+	printk("Handle opened event (%d)\n", vchar_drv.open_cnt);
+	return 0;
+}
+
+static int vchar_driver_release(struct inode *inode, struct file *flip) {
+	printk("Handle closed event\n");
+	return 0;
+}
+
+static struct file_operations fops = {
+	.owner	 = THIS_MODULE,
+	.open 	 = vchar_driver_open,
+	.release = vchar_driver_release
+};
+
 
 /* init driver */
 static int __init vchar_driver_init(void)
@@ -108,12 +128,28 @@ static int __init vchar_driver_init(void)
 		goto failed_init_hw;
 	}
 
-	/* dang ky cac entry point voi kernel */
+	/* register entry points to kernel */
+	vchar_drv.vcdev = cdev_alloc();
+	if (vchar_drv.vcdev == NULL) {
+		printk("Failed to allocate memory for cdev struct\n");
+		ret = -ENOMEM;
+		goto failed_alloc_cdev;
+	}
+	cdev_init(vchar_drv.vcdev, &fops);
+	ret = cdev_add(vchar_drv.vcdev, vchar_drv.dev_num, 1);
+	if (ret < 0) {
+		printk("Failed to add char device to the system\n");
+		goto failed_alloc_cdev;
+	}
+
 	/* dang ky ham xu ly ngat */
+
 
 	printk("Initialize virtual character driver successfully\n");
 	return 0;
 
+failed_alloc_cdev:
+	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
 	kfree(vchar_drv.vchar_hw);
 failed_alloc_struct:
@@ -126,11 +162,13 @@ failed_register_device_number:
 	return ret;	
 }
 
+
 /* exit driver */
 static void __exit vchar_driver_exit(void)
 {
 	/* huy dang ky xu ly ngat */
 	/* huy dang ky entry point voi kernel */
+	cdev_del(vchar_drv.vcdev);
 
 	/* release device */
 	vchar_hw_exit(vchar_drv.vchar_hw);
