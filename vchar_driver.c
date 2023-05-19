@@ -3,12 +3,13 @@
 #include <linux/device.h>	// contains functions which handle device file
 #include <linux/slab.h>		// contains functions as kmalloc and kzalloc
 #include <linux/cdev.h>		// contains functions which work with cdev
+#include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.6"
+#define DRIVER_VERSION "0.7"
 
 
 
@@ -36,7 +37,7 @@ int vchar_hw_init(vchar_dev_t *hw) {
 	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	if (!mem) {
 		printk("Failed to allocate memory\n");
-		return -ENOMEM;
+		return -ENOMEM; // out of memory
 	}
 
 	hw->ctrl_regs = mem;
@@ -49,13 +50,92 @@ int vchar_hw_init(vchar_dev_t *hw) {
 	return 0;
 }
 
+
 /* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
 }
 
-/* ham doc tu cac thanh ghi du lieu cua thiet bi */
-/* ham ghi vao cac thanh ghi du lieu cua thiet bi */
+
+/* read from data regs of device */
+int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
+	int read_bytes = num_regs;
+
+	// check control register
+	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_READ_DATA_BIT) == 0) {
+		printk("Not allowed to read from data registers\n");
+		return -1;
+	}
+
+	// check kernel buffer
+	if (kbuf == NULL) {
+		printk("Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	// check start register
+	if (start_reg > NUM_DATA_REGS) {
+		printk("Location of register to be read is invalid\n");
+		return -1;
+	}
+
+	// check number of bytes to be read
+	if (read_bytes > (NUM_DATA_REGS - start_reg)) 
+		read_bytes = NUM_DATA_REGS - start_reg;
+	
+	// write data from data register to kernel buffer
+	memcpy(kbuf, hw->data_regs + start_reg, read_bytes);
+
+	// update status register
+	hw->stt_regs[READ_COUNT_L_REG]++;
+	if (hw->stt_regs[READ_COUNT_L_REG] == 0)
+		hw->stt_regs[READ_COUNT_H_REG]++;
+
+	return read_bytes;
+}
+
+
+/* write to data regs of device */
+int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
+	int write_bytes = num_regs;
+
+	// check control register
+	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == 0) {
+		printk("Not allowed to write to data registers\n");
+		return -1;
+	}
+
+	// check kernel buffer
+	if (kbuf == NULL) {
+		printk("Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	// check start register
+	if (start_reg > NUM_DATA_REGS) {
+		printk("Location of register to be read is invalid\n");
+		return -1;
+	}
+
+	// check number of bytes to be written
+	if (write_bytes > (NUM_DATA_REGS - start_reg)) {
+		write_bytes = NUM_DATA_REGS - start_reg;
+		hw->stt_regs[DEVICE_STATUS_REG] |= STT_DATAREGS_OVERFLOW_BIT;
+	}
+		
+	
+	// write data to data register from kernel buffer
+	memcpy(hw->data_regs + start_reg, kbuf, write_bytes);
+
+	// update status register
+	hw->stt_regs[WRITE_COUNT_L_REG]++;
+	if (hw->stt_regs[WRITE_COUNT_L_REG] == 0)
+		hw->stt_regs[WRITE_COUNT_H_REG]++;
+
+	return write_bytes;
+}
+
+
 /* ham doc tu cac thanh ghi trang thai cua thiet bi */
 /* ham ghi vao cac thanh ghi dieu khien cua thiet bi */
 /* ham xu ly tin hieu ngat gui tu thiet bi */
@@ -76,10 +156,69 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 	return 0;
 }
 
+static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
+	ssize_t num_bytes = 0;
+	printk("Handle read %zu bytes event which starts from %lld\n", len, *off);	
+	
+	char *kernel_buf;
+	kernel_buf = kmalloc(len, GFP_KERNEL);
+	if (kernel_buf == NULL) {
+		printk("Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	num_bytes = vchar_hw_read_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
+	printk("Read %zu bytes from device\n", num_bytes);
+	if (num_bytes < 0) {
+		printk("Failed to read data\n");
+		return -EFAULT; // bad address
+	}
+	
+	// Returns number of bytes that could not be copied. On success, this will be zero.
+	if (copy_to_user(user_buf, kernel_buf, num_bytes)) {	
+		printk("Failed to copy data to user\n");
+		return -EFAULT;
+	}
+	
+	*off += num_bytes;
+	return num_bytes;
+}
+
+static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
+	ssize_t num_bytes = 0;
+	printk("Handle write %zu bytes event which starts from %lld\n", len, *off);	
+	
+	char *kernel_buf;
+	kernel_buf = kmalloc(len, GFP_KERNEL);
+	if (kernel_buf == NULL) {
+		printk("Failed to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	// Returns number of bytes that could not be copied. On success, this will be zero.
+	if (copy_from_user(kernel_buf, user_buf, len)) {	
+		printk("Failed to copy data from user\n");
+		return -EFAULT;
+	}
+
+	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
+	printk("Write %zu bytes to device\n", num_bytes);
+	if (num_bytes < 0) {
+		printk("Failed to write data\n");
+		return -EFAULT; // bad address
+	}
+	
+	*off += num_bytes;
+	return num_bytes;
+}
+
+
 static struct file_operations fops = {
 	.owner	 = THIS_MODULE,
 	.open 	 = vchar_driver_open,
-	.release = vchar_driver_release
+	.release = vchar_driver_release,
+	.read 	 = vchar_driver_read,
+	.write 	 = vchar_driver_write
 };
 
 

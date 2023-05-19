@@ -13,10 +13,10 @@
 * - init value: 0x03
 * - meaning of bits:
 * 	+ bit0:
-*		0: not allow to read from data regs
-*		1: allow to read from data regs
+*		0: not allowed to read from data regs
+*		1: allowed to read from data regs
 * 	+ bit1:
-*		0: not allow to write into data regs
+*		0: not allowed to write into data regs
 *		1: allow to write into data regs
 * 	+ bit2~7: available
 */
