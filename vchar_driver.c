@@ -4,14 +4,27 @@
 #include <linux/slab.h>		// contains functions as kmalloc and kzalloc
 #include <linux/cdev.h>		// contains functions which work with cdev
 #include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
+#include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.7"
+#define DRIVER_VERSION "0.8"
 
+#define MAGIC_NUM 21		// ID of driver
+#define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
+#define VCHAR_GET_STT_REGS 	_IOR(MAGIC_NUM, 1, stt_regs_t *)
+#define VCHAR_SET_RD_DATA_REGS 	_IOW(MAGIC_NUM, 2, unsigned char *)
+#define VCHAR_SET_WR_DATA_REGS 	_IOW(MAGIC_NUM, 3, unsigned char *)
 
+typedef struct {
+	unsigned char read_count_h_reg;
+	unsigned char read_count_l_reg;
+	unsigned char write_count_h_reg;
+	unsigned char write_count_l_reg;
+	unsigned char device_status_reg;
+} stt_regs_t; 
 
 typedef struct {
 	unsigned char *ctrl_regs;
@@ -136,8 +149,53 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 }
 
 
-/* ham doc tu cac thanh ghi trang thai cua thiet bi */
-/* ham ghi vao cac thanh ghi dieu khien cua thiet bi */
+/* clear data regs */
+int vchar_hw_clear_data(vchar_dev_t *hw) {
+	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == DISABLE) {
+		printk("Not allowed to clear data registers\n");
+		return -1;
+	}
+
+	memset(hw->data_regs, 0, NUM_CTRL_REGS * REG_SIZE);
+
+	hw->stt_regs[DEVICE_STATUS_REG] &= ~(STT_DATAREGS_OVERFLOW_BIT);
+
+	return 0;
+}
+
+
+/* read status regs */
+void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status) {
+	memcpy(status, hw->stt_regs, NUM_STT_REGS * REG_SIZE);
+}
+
+
+/* enable or disable read access */
+void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable) {
+	if (isEnable == ENABLE) {
+		hw->ctrl_regs[CONTROL_ACCESS_REG] |= CTRL_READ_DATA_BIT;
+		hw->stt_regs[DEVICE_STATUS_REG] |= STT_READ_ACCESS_BIT;	
+	}
+	else {
+		hw->ctrl_regs[CONTROL_ACCESS_REG] &= ~CTRL_READ_DATA_BIT;
+		hw->stt_regs[DEVICE_STATUS_REG] &= ~STT_READ_ACCESS_BIT;	
+	}
+}
+
+
+/* enable or disable write access */
+void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
+	if (isEnable == ENABLE) {
+		hw->ctrl_regs[CONTROL_ACCESS_REG] |= CTRL_WRITE_DATA_BIT;
+		hw->stt_regs[DEVICE_STATUS_REG] |= STT_WRITE_ACCESS_BIT;	
+	}
+	else {
+		hw->ctrl_regs[CONTROL_ACCESS_REG] &= ~CTRL_WRITE_DATA_BIT;
+		hw->stt_regs[DEVICE_STATUS_REG] &= ~STT_WRITE_ACCESS_BIT;	
+	}
+}
+
+
 /* ham xu ly tin hieu ngat gui tu thiet bi */
 /******************************* device specific - END *****************************/
 
@@ -158,9 +216,9 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
-	printk("Handle read %zu bytes event which starts from %lld\n", len, *off);	
-	
 	char *kernel_buf;
+	printk("Handle read %zu bytes event which starts from %lld\n", len, *off);	
+		
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk("Failed to allocate memory\n");
@@ -186,9 +244,9 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 
 static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
-	printk("Handle write %zu bytes event which starts from %lld\n", len, *off);	
-	
 	char *kernel_buf;
+	printk("Handle write %zu bytes event which starts from %lld\n", len, *off);		
+	
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk("Failed to allocate memory\n");
@@ -202,7 +260,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	}
 
 	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
-	printk("Write %zu bytes to device\n", num_bytes);
+	printk("Wrote %zu bytes to device\n", num_bytes);
 	if (num_bytes < 0) {
 		printk("Failed to write data\n");
 		return -EFAULT; // bad address
@@ -212,13 +270,56 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	return num_bytes;
 }
 
+static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned long arg) {
+	int ret = 0;
+	stt_regs_t status;
+	unsigned char isReadEnable, isWriteEnable;
+
+	switch (cmd) {
+		case VCHAR_CLR_DATA_REGS:
+			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
+			if (ret == 0)
+				printk("Clear data registers successfully\n");
+			else
+				printk("Can not clear data registers\n");
+			break;
+		case VCHAR_GET_STT_REGS:		
+			vchar_hw_get_status(vchar_drv.vchar_hw, &status);
+			if (copy_to_user((stt_regs_t *)arg, &status, sizeof(status))) {
+				printk("Failed to send information of status registers to user\n");
+				return -EFAULT;
+			}
+			printk("Got information from status registers\n");
+			break;
+		case VCHAR_SET_RD_DATA_REGS:		
+			if (copy_from_user(&isReadEnable, (unsigned char*)arg, sizeof(isReadEnable))) {
+				printk("Failed to get read access from user\n");
+				return -EFAULT;
+			}
+			vchar_hw_enable_read(vchar_drv.vchar_hw, isReadEnable);
+			printk("Set %s to read\n", (isReadEnable == 1) ? "enable" : "disable");
+			break;
+		case VCHAR_SET_WR_DATA_REGS:		
+			if (copy_from_user(&isWriteEnable, (unsigned char*)arg, sizeof(isWriteEnable))) {
+				printk("Failed to get write access from user\n");
+				return -EFAULT;
+			}
+			vchar_hw_enable_write(vchar_drv.vchar_hw, isWriteEnable);
+			printk("Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
+			break;
+	}
+
+	return ret;
+}
+
 
 static struct file_operations fops = {
-	.owner	 = THIS_MODULE,
-	.open 	 = vchar_driver_open,
-	.release = vchar_driver_release,
-	.read 	 = vchar_driver_read,
-	.write 	 = vchar_driver_write
+	.owner	 	= THIS_MODULE,
+	.open 	 	= vchar_driver_open,
+	.release 	= vchar_driver_release,
+	.read 	 	= vchar_driver_read,
+	.write 	 	= vchar_driver_write,
+	.unlocked_ioctl = vchar_driver_ioctl
 };
 
 
@@ -306,7 +407,9 @@ failed_register_device_number:
 static void __exit vchar_driver_exit(void)
 {
 	/* huy dang ky xu ly ngat */
-	/* huy dang ky entry point voi kernel */
+
+
+	/* unregister entry point with kernel */
 	cdev_del(vchar_drv.vcdev);
 
 	/* release device */

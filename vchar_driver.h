@@ -17,7 +17,7 @@
 *		1: allowed to read from data regs
 * 	+ bit1:
 *		0: not allowed to write into data regs
-*		1: allow to write into data regs
+*		1: allowed to write into data regs
 * 	+ bit2~7: available
 */
 #define CONTROL_ACCESS_REG 0
