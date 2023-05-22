@@ -10,7 +10,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.8"
+#define DRIVER_VERSION "0.9"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -49,7 +49,7 @@ int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
 	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	if (!mem) {
-		printk("Failed to allocate memory\n");
+		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
 	}
 
@@ -76,19 +76,19 @@ int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf)
 
 	// check control register
 	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_READ_DATA_BIT) == 0) {
-		printk("Not allowed to read from data registers\n");
+		printk(KERN_WARNING "Not allowed to read from data registers\n");
 		return -1;
 	}
 
 	// check kernel buffer
 	if (kbuf == NULL) {
-		printk("Failed to allocate memory\n");
+		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
 	// check start register
 	if (start_reg > NUM_DATA_REGS) {
-		printk("Location of register to be read is invalid\n");
+		printk(KERN_WARNING "Location of register to be read is invalid\n");
 		return -1;
 	}
 
@@ -114,19 +114,19 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 
 	// check control register
 	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == 0) {
-		printk("Not allowed to write to data registers\n");
+		printk(KERN_WARNING "Not allowed to write to data registers\n");
 		return -1;
 	}
 
 	// check kernel buffer
 	if (kbuf == NULL) {
-		printk("Failed to allocate memory\n");
+		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
 	// check start register
 	if (start_reg > NUM_DATA_REGS) {
-		printk("Location of register to be read is invalid\n");
+		printk(KERN_WARNING "Location of register to be read is invalid\n");
 		return -1;
 	}
 
@@ -152,14 +152,11 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 /* clear data regs */
 int vchar_hw_clear_data(vchar_dev_t *hw) {
 	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == DISABLE) {
-		printk("Not allowed to clear data registers\n");
+		printk(KERN_WARNING "Not allowed to clear data registers\n");
 		return -1;
 	}
-
 	memset(hw->data_regs, 0, NUM_CTRL_REGS * REG_SIZE);
-
 	hw->stt_regs[DEVICE_STATUS_REG] &= ~(STT_DATAREGS_OVERFLOW_BIT);
-
 	return 0;
 }
 
@@ -205,36 +202,36 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 /* entry points functions*/
 static int vchar_driver_open(struct inode *inode, struct file *flip) {
 	vchar_drv.open_cnt++;
-	printk("Handle opened event (%d)\n", vchar_drv.open_cnt);
+	printk(KERN_INFO "Handle opened event (%d)\n", vchar_drv.open_cnt);
 	return 0;
 }
 
 static int vchar_driver_release(struct inode *inode, struct file *flip) {
-	printk("Handle closed event\n");
+	printk(KERN_INFO "Handle closed event\n");
 	return 0;
 }
 
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
-	printk("Handle read %zu bytes event which starts from %lld\n", len, *off);	
+	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld\n", len, *off);	
 		
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
-		printk("Failed to allocate memory\n");
+		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
 	num_bytes = vchar_hw_read_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
-	printk("Read %zu bytes from device\n", num_bytes);
+	printk(KERN_INFO "Read %zu bytes from device\n", num_bytes);
 	if (num_bytes < 0) {
-		printk("Failed to read data\n");
+		printk(KERN_ERR "Failed to read data\n");
 		return -EFAULT; // bad address
 	}
 	
 	// Returns number of bytes that could not be copied. On success, this will be zero.
 	if (copy_to_user(user_buf, kernel_buf, num_bytes)) {	
-		printk("Failed to copy data to user\n");
+		printk(KERN_ERR "Failed to copy data to user\n");
 		return -EFAULT;
 	}
 	
@@ -245,24 +242,24 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
-	printk("Handle write %zu bytes event which starts from %lld\n", len, *off);		
+	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld\n", len, *off);		
 	
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
-		printk("Failed to allocate memory\n");
+		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
 	}
 
 	// Returns number of bytes that could not be copied. On success, this will be zero.
 	if (copy_from_user(kernel_buf, user_buf, len)) {	
-		printk("Failed to copy data from user\n");
+		printk(KERN_ERR "Failed to copy data from user\n");
 		return -EFAULT;
 	}
 
 	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
-	printk("Wrote %zu bytes to device\n", num_bytes);
+	printk(KERN_INFO "Wrote %zu bytes to device\n", num_bytes);
 	if (num_bytes < 0) {
-		printk("Failed to write data\n");
+		printk(KERN_ERR "Failed to write data\n");
 		return -EFAULT; // bad address
 	}
 	
@@ -279,33 +276,33 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 		case VCHAR_CLR_DATA_REGS:
 			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
 			if (ret == 0)
-				printk("Clear data registers successfully\n");
+				printk(KERN_INFO "Clear data registers successfully\n");
 			else
-				printk("Can not clear data registers\n");
+				printk(KERN_WARNING "Can not clear data registers\n");
 			break;
 		case VCHAR_GET_STT_REGS:		
 			vchar_hw_get_status(vchar_drv.vchar_hw, &status);
 			if (copy_to_user((stt_regs_t *)arg, &status, sizeof(status))) {
-				printk("Failed to send information of status registers to user\n");
+				printk(KERN_ERR "Failed to send information of status registers to user\n");
 				return -EFAULT;
 			}
-			printk("Got information from status registers\n");
+			printk(KERN_INFO "Got information from status registers\n");
 			break;
 		case VCHAR_SET_RD_DATA_REGS:		
 			if (copy_from_user(&isReadEnable, (unsigned char*)arg, sizeof(isReadEnable))) {
-				printk("Failed to get read access from user\n");
+				printk(KERN_ERR "Failed to get read access from user\n");
 				return -EFAULT;
 			}
 			vchar_hw_enable_read(vchar_drv.vchar_hw, isReadEnable);
-			printk("Set %s to read\n", (isReadEnable == 1) ? "enable" : "disable");
+			printk(KERN_INFO "Set %s to read\n", (isReadEnable == 1) ? "enable" : "disable");
 			break;
 		case VCHAR_SET_WR_DATA_REGS:		
 			if (copy_from_user(&isWriteEnable, (unsigned char*)arg, sizeof(isWriteEnable))) {
-				printk("Failed to get write access from user\n");
+				printk(KERN_ERR "Failed to get write access from user\n");
 				return -EFAULT;
 			}
 			vchar_hw_enable_write(vchar_drv.vchar_hw, isWriteEnable);
-			printk("Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
+			printk(KERN_INFO "Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
 			break;
 	}
 
@@ -331,16 +328,16 @@ static int __init vchar_driver_init(void)
 	/* allocate device number */
 	ret = alloc_chrdev_region(&vchar_drv.dev_num, 0, 1, "vchar_device");
 	if (ret == 0)
-		printk("Allocated device number (%d,%d) dynamically\n", MAJOR(vchar_drv.dev_num), MINOR(vchar_drv.dev_num));
+		printk(KERN_INFO "Allocated device number (%d,%d) dynamically\n", MAJOR(vchar_drv.dev_num), MINOR(vchar_drv.dev_num));
 	else {
-		printk("Failed to register device number dynamically\n");
+		printk(KERN_ERR "Failed to register device number dynamically\n");
 		goto failed_register_device_number;
 	}	 
 
 	/* create device class */
 	vchar_drv.dev_class = class_create(THIS_MODULE, "class_vchar_dev");
 	if (vchar_drv.dev_class == NULL) {
-		printk("Failed to create a device class\n");
+		printk(KERN_ERR "Failed to create a device class\n");
 		ret = -1;
 		goto failed_create_class;
 	}
@@ -348,7 +345,7 @@ static int __init vchar_driver_init(void)
 	/* create device file */
 	vchar_drv.dev = device_create(vchar_drv.dev_class, NULL, vchar_drv.dev_num, NULL, "vchar_dev");
 	if (IS_ERR(vchar_drv.dev)) {
-		printk("Failed to create a device\n");
+		printk(KERN_ERR "Failed to create a device\n");
 		ret = -1;
 		goto failed_create_device;
 	}
@@ -356,7 +353,7 @@ static int __init vchar_driver_init(void)
 	/* allocate memory for struct of driver and init */
 	vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
 	if (!vchar_drv.vchar_hw) {
-		printk("Failed to allocate memory for struct of driver\n");
+		printk(KERN_ERR "Failed to allocate memory for struct of driver\n");
 		ret = -ENOMEM;		
 		goto failed_alloc_struct;
 	}
@@ -364,28 +361,28 @@ static int __init vchar_driver_init(void)
 	/* init device */
 	ret = vchar_hw_init(vchar_drv.vchar_hw);
 	if (ret != 0) {
-		printk("Failed to initialize hardware\n");
+		printk(KERN_ERR "Failed to initialize hardware\n");
 		goto failed_init_hw;
 	}
 
 	/* register entry points to kernel */
 	vchar_drv.vcdev = cdev_alloc();
 	if (vchar_drv.vcdev == NULL) {
-		printk("Failed to allocate memory for cdev struct\n");
+		printk(KERN_ERR "Failed to allocate memory for cdev struct\n");
 		ret = -ENOMEM;
 		goto failed_alloc_cdev;
 	}
 	cdev_init(vchar_drv.vcdev, &fops);
 	ret = cdev_add(vchar_drv.vcdev, vchar_drv.dev_num, 1);
 	if (ret < 0) {
-		printk("Failed to add char device to the system\n");
+		printk(KERN_ERR "Failed to add char device to the system\n");
 		goto failed_alloc_cdev;
 	}
 
 	/* dang ky ham xu ly ngat */
 
 
-	printk("Initialize virtual character driver successfully\n");
+	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
 failed_alloc_cdev:
@@ -425,7 +422,7 @@ static void __exit vchar_driver_exit(void)
 	/* release device number */
 	unregister_chrdev_region(vchar_drv.dev_num, 1);
 
-	printk("Exit virtual character driver\n");
+	printk(KERN_INFO "Exit virtual character driver\n");
 }
 /********************************* OS specific - END ********************************/
 
