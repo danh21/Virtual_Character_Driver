@@ -5,12 +5,13 @@
 #include <linux/cdev.h>		// contains functions which work with cdev
 #include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
 #include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
+#include <linux/proc_fs.h>	// contains functions which create/remove file in procfs
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "0.9"
+#define DRIVER_VERSION "1.0"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -199,7 +200,7 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 
 
 /******************************** OS specific - START *******************************/
-/* entry points functions*/
+/* entry points functions for device file */
 static int vchar_driver_open(struct inode *inode, struct file *flip) {
 	vchar_drv.open_cnt++;
 	printk(KERN_INFO "Handle opened event (%d)\n", vchar_drv.open_cnt);
@@ -271,7 +272,6 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 	int ret = 0;
 	stt_regs_t status;
 	unsigned char isReadEnable, isWriteEnable;
-
 	switch (cmd) {
 		case VCHAR_CLR_DATA_REGS:
 			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
@@ -305,10 +305,8 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			printk(KERN_INFO "Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
 			break;
 	}
-
 	return ret;
 }
-
 
 static struct file_operations fops = {
 	.owner	 	= THIS_MODULE,
@@ -318,6 +316,58 @@ static struct file_operations fops = {
 	.write 	 	= vchar_driver_write,
 	.unlocked_ioctl = vchar_driver_ioctl
 };
+
+
+
+/* entry points functions for file in procfs */
+static int vchar_proc_open(struct inode *inode, struct file *flip) {
+	printk(KERN_INFO "Handle opened event on proc file\n");
+	return 0;
+}
+
+static int vchar_proc_release(struct inode *inode, struct file *flip) {
+	printk(KERN_INFO "Handle closed event on proc file\n");
+	return 0;
+}
+
+static ssize_t vchar_proc_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
+	unsigned int index = 0, read_cnt, write_cnt;
+	char buf[100];
+	stt_regs_t status;
+	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld on proc file\n", len, *off);	
+	
+	if (*off > 0)		// avoid system read again
+		return 0;
+
+	vchar_hw_get_status(vchar_drv.vchar_hw, &status);
+	read_cnt = (status.read_count_h_reg << 8) | status.read_count_l_reg;
+	write_cnt = (status.write_count_h_reg << 8) | status.write_count_l_reg;
+	
+	// index means read_bytes and index of arr
+	index += sprintf(buf + index, "Number of reading: %u\nNumber of writing: %u\n", read_cnt, write_cnt);
+	index += sprintf(buf + index, "Device status: 0x%02x\n", status.device_status_reg);
+	
+	// Returns number of bytes that could not be copied. On success, this will be zero.
+	if (copy_to_user(user_buf, buf, index)) {	
+		printk(KERN_ERR "Failed to copy data to user\n");
+		return -EFAULT;
+	}
+	*off += index;
+	return index;
+}
+
+static ssize_t vchar_proc_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
+	printk(KERN_INFO "No action to handle writing event on proc file\n");	// read-only
+	return len;
+}
+
+static struct file_operations proc_fops = {
+	.open	 = vchar_proc_open,
+	.release = vchar_proc_release,
+	.read	 = vchar_proc_read,
+	.write	 = vchar_proc_write	
+};
+
 
 
 /* init driver */
@@ -379,12 +429,18 @@ static int __init vchar_driver_init(void)
 		goto failed_alloc_cdev;
 	}
 
-	/* dang ky ham xu ly ngat */
+	/* Create file /proc/vchar_proc */
+	if (proc_create("vchar_proc", 666, NULL, &proc_fops) == NULL) {
+		printk(KERN_ERR "Failed to create file in procfs\n");
+		goto failed_create_proc;
+	}
 
+	/* dang ky ham xu ly ngat */
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
+failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
@@ -400,11 +456,14 @@ failed_register_device_number:
 }
 
 
+
 /* exit driver */
 static void __exit vchar_driver_exit(void)
 {
 	/* huy dang ky xu ly ngat */
-
+	
+	/* remove file /proc/vchar_proc */
+	remove_proc_entry("vchar_proc", NULL);
 
 	/* unregister entry point with kernel */
 	cdev_del(vchar_drv.vcdev);

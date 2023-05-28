@@ -96,7 +96,7 @@ void get_stt_chardev() {
 		unsigned int read_cnt = (stt.read_count_h << 8) | stt.read_count_l;
 		unsigned int write_cnt = (stt.write_count_h << 8) | stt.write_count_l;
 		printf("Number of reading: %u\nNumber of writing: %u\n", read_cnt, write_cnt);
-		printf("Device status: %u\n", stt.device_status);
+		printf("Device status: 0x%02x\n", stt.device_status);
 	}
 	else 
 		printf("Get status from character device unsuccessfully\n");
