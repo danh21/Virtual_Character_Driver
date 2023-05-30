@@ -30,16 +30,20 @@ __attribute__((section("__versions"))) = {
 	{ 0x196103b4, __VMLINUX_SYMBOL_STR(device_create) },
 	{ 0x7e5df8e3, __VMLINUX_SYMBOL_STR(__class_create) },
 	{ 0x29537c9e, __VMLINUX_SYMBOL_STR(alloc_chrdev_region) },
-	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
-	{ 0xd2b09ce5, __VMLINUX_SYMBOL_STR(__kmalloc) },
-	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
-	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
-	{ 0x41ec4c1a, __VMLINUX_SYMBOL_STR(kmem_cache_alloc_trace) },
-	{ 0x98ab5c8d, __VMLINUX_SYMBOL_STR(kmalloc_caches) },
 	{ 0xf0fdf6cb, __VMLINUX_SYMBOL_STR(__stack_chk_fail) },
+	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
 	{ 0x71de9b3f, __VMLINUX_SYMBOL_STR(_copy_to_user) },
 	{ 0x88db9f48, __VMLINUX_SYMBOL_STR(__check_object_size) },
+	{ 0xd2b09ce5, __VMLINUX_SYMBOL_STR(__kmalloc) },
+	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
+	{ 0x9c3df9b4, __VMLINUX_SYMBOL_STR(seq_read) },
+	{ 0x41ec4c1a, __VMLINUX_SYMBOL_STR(kmem_cache_alloc_trace) },
+	{ 0x98ab5c8d, __VMLINUX_SYMBOL_STR(kmalloc_caches) },
 	{ 0x91715312, __VMLINUX_SYMBOL_STR(sprintf) },
+	{ 0x74df1d4, __VMLINUX_SYMBOL_STR(seq_printf) },
+	{ 0x257f3887, __VMLINUX_SYMBOL_STR(seq_open) },
+	{ 0x4f897611, __VMLINUX_SYMBOL_STR(seq_release) },
+	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
 	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
 	{ 0xbdfb6dbb, __VMLINUX_SYMBOL_STR(__fentry__) },
 };
@@ -50,7 +54,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "0E44D949D75DB67167B1FA1");
+MODULE_INFO(srcversion, "73BEA73CC1553F104649211");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");

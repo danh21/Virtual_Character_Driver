@@ -11,7 +11,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.0"
+#define DRIVER_VERSION "1.1"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -64,12 +64,10 @@ int vchar_hw_init(vchar_dev_t *hw) {
 	return 0;
 }
 
-
 /* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
 }
-
 
 /* read from data regs of device */
 int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
@@ -104,10 +102,8 @@ int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf)
 	hw->stt_regs[READ_COUNT_L_REG]++;
 	if (hw->stt_regs[READ_COUNT_L_REG] == 0)
 		hw->stt_regs[READ_COUNT_H_REG]++;
-
 	return read_bytes;
 }
-
 
 /* write to data regs of device */
 int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
@@ -145,10 +141,8 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 	hw->stt_regs[WRITE_COUNT_L_REG]++;
 	if (hw->stt_regs[WRITE_COUNT_L_REG] == 0)
 		hw->stt_regs[WRITE_COUNT_H_REG]++;
-
 	return write_bytes;
 }
-
 
 /* clear data regs */
 int vchar_hw_clear_data(vchar_dev_t *hw) {
@@ -161,12 +155,10 @@ int vchar_hw_clear_data(vchar_dev_t *hw) {
 	return 0;
 }
 
-
 /* read status regs */
 void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status) {
 	memcpy(status, hw->stt_regs, NUM_STT_REGS * REG_SIZE);
 }
-
 
 /* enable or disable read access */
 void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable) {
@@ -180,7 +172,6 @@ void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable) {
 	}
 }
 
-
 /* enable or disable write access */
 void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 	if (isEnable == ENABLE) {
@@ -193,8 +184,8 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 	}
 }
 
-
 /* ham xu ly tin hieu ngat gui tu thiet bi */
+
 /******************************* device specific - END *****************************/
 
 
@@ -320,40 +311,59 @@ static struct file_operations fops = {
 
 
 /* entry points functions for file in procfs */
+static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
+	char *msg;
+	msg = kmalloc(256, GFP_KERNEL);
+	if (!msg) {
+		pr_err("seq_start: failed to allocate memory");
+		return NULL;
+	}
+	sprintf(msg, "Message(%lld): size(%zu), from(%zu), count(%zu), index(%lld), read_pos(%lld)\n", *pos, s->size, s->from, s->count, s->index, s->read_pos);
+	return msg;
+}
+
+static int vchar_seq_show(struct seq_file *s, void *pData) {
+	char *msg = pData;
+	seq_printf(s, "%s\n", msg);
+	printk(KERN_INFO "seg_show: %s\n", msg);
+	return 0;	// success
+}
+
+static void* vchar_seq_next(struct seq_file *s, void *pData, loff_t *pos) {
+	char *msg = pData;
+	++*pos;		// update next pos
+	sprintf(msg, "Message(%lld): size(%zu), from(%zu), count(%zu), index(%lld), read_pos(%lld)\n", *pos, s->size, s->from, s->count, s->index, s->read_pos);
+	return msg;
+}
+
+static void vchar_seq_stop(struct seq_file *s, void *pData) {
+	printk(KERN_INFO "seq_stop\n");
+	kfree(pData);
+}
+
+static struct seq_operations seq_ops = {
+	.start = vchar_seq_start,
+	.next  = vchar_seq_next,
+	.stop  = vchar_seq_stop,
+	.show  = vchar_seq_show
+};
+
+
 static int vchar_proc_open(struct inode *inode, struct file *flip) {
 	printk(KERN_INFO "Handle opened event on proc file\n");
-	return 0;
+	return seq_open(flip, &seq_ops);
 }
 
 static int vchar_proc_release(struct inode *inode, struct file *flip) {
 	printk(KERN_INFO "Handle closed event on proc file\n");
-	return 0;
+	return seq_release(inode, flip);
 }
 
 static ssize_t vchar_proc_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
-	unsigned int index = 0, read_cnt, write_cnt;
-	char buf[100];
-	stt_regs_t status;
-	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld on proc file\n", len, *off);	
-	
-	if (*off > 0)		// avoid system read again
-		return 0;
-
-	vchar_hw_get_status(vchar_drv.vchar_hw, &status);
-	read_cnt = (status.read_count_h_reg << 8) | status.read_count_l_reg;
-	write_cnt = (status.write_count_h_reg << 8) | status.write_count_l_reg;
-	
-	// index means read_bytes and index of arr
-	index += sprintf(buf + index, "Number of reading: %u\nNumber of writing: %u\n", read_cnt, write_cnt);
-	index += sprintf(buf + index, "Device status: 0x%02x\n", status.device_status_reg);
-	
-	// Returns number of bytes that could not be copied. On success, this will be zero.
-	if (copy_to_user(user_buf, buf, index)) {	
-		printk(KERN_ERR "Failed to copy data to user\n");
-		return -EFAULT;
-	}
-	*off += index;
-	return index;
+	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld on proc file\n", len, *off);		
+	if (*off > 131072)	// user buffer of cat process has capacity: 131072 bytes
+		printk(KERN_INFO "No problem about size of user buffer\n");
+	return seq_read(flip, user_buf, len, off);
 }
 
 static ssize_t vchar_proc_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
