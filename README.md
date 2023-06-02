@@ -1,3 +1,17 @@
-# Virtual_Character_Driver
+# Project: Virtual Character Driver
 
-REF: https://vimentor.com/vi/lesson/linux-device-driver
+# Reference: 
+    https://vimentor.com/vi/lesson/linux-device-driver
+
+# Instructiom:
+    - To upload kernel module: 
+        + Open Terminal contains file vchar_driver.ko
+        + Login with su
+        + Enter cmd: insmod vchar_driver.ko
+    - To run application:
+        + Open Terminal in App folder
+        + Enter cmd: ./app
+    - To remove kernel module:
+        + Open Terminal contains file vchar_driver.ko
+        + Login with su
+        + Enter cmd: rmmod vchar_driver.ko
