@@ -15,3 +15,6 @@
         + Open Terminal contains file vchar_driver.ko
         + Login with su
         + Enter cmd: rmmod vchar_driver.ko
+    - To test strace:
+        + Open Terminal in Strace folder
+        + Enter cmd: ./testStrace
