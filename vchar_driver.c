@@ -8,12 +8,14 @@
 #include <linux/proc_fs.h>	// contains functions which create/remove file in procfs
 #include <linux/timekeeping.h>	// contains functions to get wall time
 #include <linux/jiffies.h>	// contains functions to get system uptime
+#include <linux/sched.h>	// contains functions which are related to scheduling
+#include <linux/delay.h>	// contains functions which are related to delay and sleep
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.2"
+#define DRIVER_VERSION "1.3"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -134,8 +136,7 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 		write_bytes = NUM_DATA_REGS - start_reg;
 		hw->stt_regs[DEVICE_STATUS_REG] |= STT_DATAREGS_OVERFLOW_BIT;
 	}
-		
-	
+
 	// write data to data register from kernel buffer
 	memcpy(hw->data_regs + start_reg, kbuf, write_bytes);
 
@@ -212,6 +213,7 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
+
 	struct timespec read_time = current_kernel_time();
 	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, read_time.tv_sec, read_time.tv_nsec/1000000);	
 		
@@ -221,6 +223,11 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 		return -ENOMEM;
 	}
 
+	// driver will sleep for a period of at least timeout
+	set_current_state(TASK_UNINTERRUPTIBLE);
+	schedule_timeout(3 * HZ); // 10s
+
+	// READ
 	num_bytes = vchar_hw_read_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
 	printk(KERN_INFO "Read %zu bytes from device\n", num_bytes);
 	if (num_bytes < 0) {
@@ -233,7 +240,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 		printk(KERN_ERR "Failed to copy data to user\n");
 		return -EFAULT;
 	}
-	
+
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -241,6 +248,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
+
 	struct timeval write_time;
 	do_gettimeofday(&write_time);
 	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, write_time.tv_sec, write_time.tv_usec/1000);		
@@ -257,6 +265,10 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		return -EFAULT;
 	}
 
+	//mdelay(10000);	//10s
+	ssleep(3);	//10s
+	
+	// WRITE
 	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
 	printk(KERN_INFO "Wrote %zu bytes to device\n", num_bytes);
 	if (num_bytes < 0) {
