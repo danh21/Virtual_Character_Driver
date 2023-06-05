@@ -3,11 +3,12 @@
 # Reference: 
     https://vimentor.com/vi/lesson/linux-device-driver
 
-# Instructiom:
+# Instruction:
     - To upload kernel module: 
         + Open Terminal contains file vchar_driver.ko
         + Login with su
         + Enter cmd: insmod vchar_driver.ko
+        + Enter cmd: chmod 666 /dev/vchar_dev -> for user to interact with device file
     - To run application:
         + Open Terminal in App folder
         + Enter cmd: ./app

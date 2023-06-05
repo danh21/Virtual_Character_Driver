@@ -6,12 +6,14 @@
 #include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
 #include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
 #include <linux/proc_fs.h>	// contains functions which create/remove file in procfs
+#include <linux/timekeeping.h>	// contains functions to get wall time
+#include <linux/jiffies.h>	// contains functions to get system uptime
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.1"
+#define DRIVER_VERSION "1.2"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -40,6 +42,7 @@ struct _vchar_drv {
 	vchar_dev_t *vchar_hw;
 	struct cdev *vcdev;
 	unsigned int open_cnt;
+	unsigned long start_time;
 } vchar_drv;
 
 
@@ -60,7 +63,6 @@ int vchar_hw_init(vchar_dev_t *hw) {
 
 	hw->ctrl_regs[CONTROL_ACCESS_REG] = 0x03;
 	hw->stt_regs[DEVICE_STATUS_REG] = 0x03;
-
 	return 0;
 }
 
@@ -193,12 +195,16 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 /******************************** OS specific - START *******************************/
 /* entry points functions for device file */
 static int vchar_driver_open(struct inode *inode, struct file *flip) {
+	vchar_drv.start_time = jiffies;
 	vchar_drv.open_cnt++;
 	printk(KERN_INFO "Handle opened event (%d)\n", vchar_drv.open_cnt);
 	return 0;
 }
 
 static int vchar_driver_release(struct inode *inode, struct file *flip) {
+	struct timeval using_time;
+	jiffies_to_timeval(jiffies - vchar_drv.start_time, &using_time);
+	printk(KERN_INFO "The driver is used in %ld.%ld seconds\n", using_time.tv_sec, using_time.tv_usec/1000);
 	printk(KERN_INFO "Handle closed event\n");
 	return 0;
 }
@@ -206,7 +212,8 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
-	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld\n", len, *off);	
+	struct timespec read_time = current_kernel_time();
+	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, read_time.tv_sec, read_time.tv_nsec/1000000);	
 		
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
@@ -234,7 +241,9 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
-	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld\n", len, *off);		
+	struct timeval write_time;
+	do_gettimeofday(&write_time);
+	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, write_time.tv_sec, write_time.tv_usec/1000);		
 	
 	kernel_buf = kmalloc(len, GFP_KERNEL);
 	if (kernel_buf == NULL) {
