@@ -10,12 +10,13 @@
 #include <linux/jiffies.h>	// contains functions to get system uptime
 #include <linux/sched.h>	// contains functions which are related to scheduling
 #include <linux/delay.h>	// contains functions which are related to delay and sleep
+#include <linux/timer.h>	// contains functions which are related to kernel timer
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.3"
+#define DRIVER_VERSION "1.4"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -45,7 +46,13 @@ struct _vchar_drv {
 	struct cdev *vcdev;
 	unsigned int open_cnt;
 	unsigned long start_time;
+	struct timer_list vchar_ktimer;
 } vchar_drv;
+
+typedef struct {
+	int param1;
+	int param2;
+} vchar_ktimer_data_t;
 
 
 
@@ -401,6 +408,31 @@ static struct file_operations proc_fops = {
 
 
 
+/* handle and config kernel timer */
+static void handle_timer(unsigned long data) {
+	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
+	if (!pData) {
+		printk(KERN_ERR "Can not handle a NULL pointer\n");
+		return;
+	}
+
+	++pData->param1;
+	--pData->param2;
+	printk(KERN_INFO "Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
+
+	// change kernel timer to continue to task again
+	mod_timer(&vchar_drv.vchar_ktimer, jiffies + 10*HZ);
+}
+
+static void config_timer(struct timer_list* ktimer) {
+	static vchar_ktimer_data_t data;
+	ktimer->expires = jiffies + 10 * HZ;
+	ktimer->function = handle_timer;
+	ktimer->data = (unsigned long)&data;
+}
+
+
+
 /* init driver */
 static int __init vchar_driver_init(void)
 {
@@ -466,6 +498,11 @@ static int __init vchar_driver_init(void)
 		goto failed_create_proc;
 	}
 
+	/* Init, config, register kernel timer */
+	init_timer(&vchar_drv.vchar_ktimer);
+	config_timer(&vchar_drv.vchar_ktimer);
+	add_timer(&vchar_drv.vchar_ktimer);
+
 	/* dang ky ham xu ly ngat */
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
@@ -492,6 +529,9 @@ failed_register_device_number:
 static void __exit vchar_driver_exit(void)
 {
 	/* huy dang ky xu ly ngat */
+
+	/* remove kernel timer */
+	del_timer(&vchar_drv.vchar_ktimer);
 	
 	/* remove file /proc/vchar_proc */
 	remove_proc_entry("vchar_proc", NULL);

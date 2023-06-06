@@ -20,9 +20,12 @@ __attribute__((section("__versions"))) = {
 	{ 0x28950ef1, __VMLINUX_SYMBOL_STR(module_layout) },
 	{ 0x3fa89e8f, __VMLINUX_SYMBOL_STR(cdev_del) },
 	{ 0xa16aae11, __VMLINUX_SYMBOL_STR(remove_proc_entry) },
+	{ 0xc996d097, __VMLINUX_SYMBOL_STR(del_timer) },
 	{ 0x7485e15e, __VMLINUX_SYMBOL_STR(unregister_chrdev_region) },
 	{ 0x450c190, __VMLINUX_SYMBOL_STR(class_destroy) },
 	{ 0xacbfe419, __VMLINUX_SYMBOL_STR(device_destroy) },
+	{ 0xbe2c0274, __VMLINUX_SYMBOL_STR(add_timer) },
+	{ 0x593a99b, __VMLINUX_SYMBOL_STR(init_timer_key) },
 	{ 0x8c34c149, __VMLINUX_SYMBOL_STR(proc_create_data) },
 	{ 0x5f675a65, __VMLINUX_SYMBOL_STR(cdev_add) },
 	{ 0xdacd8618, __VMLINUX_SYMBOL_STR(cdev_init) },
@@ -40,6 +43,7 @@ __attribute__((section("__versions"))) = {
 	{ 0xd2b09ce5, __VMLINUX_SYMBOL_STR(__kmalloc) },
 	{ 0x34184afe, __VMLINUX_SYMBOL_STR(current_kernel_time) },
 	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
+	{ 0x8834396c, __VMLINUX_SYMBOL_STR(mod_timer) },
 	{ 0xf0fdf6cb, __VMLINUX_SYMBOL_STR(__stack_chk_fail) },
 	{ 0x9a1fc4b4, __VMLINUX_SYMBOL_STR(jiffies_to_timeval) },
 	{ 0x9c3df9b4, __VMLINUX_SYMBOL_STR(seq_read) },
@@ -61,7 +65,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "C2BFA497A08737F20E91B0A");
+MODULE_INFO(srcversion, "16ACCC6903CA46BC1B8FA1D");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
