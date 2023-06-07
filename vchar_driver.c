@@ -17,7 +17,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.5"
+#define DRIVER_VERSION "1.6"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -51,6 +51,7 @@ struct _vchar_drv {
 	unsigned long start_time;
 	struct timer_list vchar_ktimer;
 	volatile uint32_t intr_cnt;
+	struct tasklet_struct* vchar_dynamic_tasklet;
 } vchar_drv;
 
 typedef struct {
@@ -204,13 +205,16 @@ void vchar_hw_bh_task(unsigned long arg) {
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), *intr_cnt_p);
 }
 
-DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+// DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
 
 irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	// top-half task
 	vchar_drv.intr_cnt++;
+
 	// bottom-half task
-	tasklet_schedule(&vchar_static_tasklet);
+	// tasklet_schedule(&vchar_static_tasklet);
+	tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
+
 	return IRQ_HANDLED;
 }
 /* **************************************************************************************** Device specific - END ************************************************************************************** */
@@ -529,9 +533,20 @@ static int __init vchar_driver_init(void)
 		goto failed_create_proc;
 	}
 
+	/* create tasklet for bottom-half task */
+	vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
+	if (!vchar_drv.vchar_dynamic_tasklet) {
+		printk(KERN_ERR "Failed to allocate memory for tasklet\n");
+		ret = -ENOMEM;		
+		goto failed_create_tasklet;
+	}
+	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
+failed_create_tasklet:
+	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
@@ -553,7 +568,8 @@ failed_register_device_number:
 static void __exit vchar_driver_exit(void)
 {
 	/* unregister ISR */
-	tasklet_kill(&vchar_static_tasklet);
+	tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
+	//tasklet_kill(&vchar_static_tasklet);
 	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
 
 	/* remove kernel timer */
