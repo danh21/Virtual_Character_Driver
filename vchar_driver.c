@@ -11,18 +11,21 @@
 #include <linux/sched.h>	// contains functions which are related to scheduling
 #include <linux/delay.h>	// contains functions which are related to delay and sleep
 #include <linux/timer.h>	// contains functions which are related to kernel timer
+#include <linux/interrupt.h>	// contains functions which are related to interrupt
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.4"
+#define DRIVER_VERSION "1.5"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
 #define VCHAR_GET_STT_REGS 	_IOR(MAGIC_NUM, 1, stt_regs_t *)
 #define VCHAR_SET_RD_DATA_REGS 	_IOW(MAGIC_NUM, 2, unsigned char *)
 #define VCHAR_SET_WR_DATA_REGS 	_IOW(MAGIC_NUM, 3, unsigned char *)
+
+#define IRQ_NUMBER 11
 
 typedef struct {
 	unsigned char read_count_h_reg;
@@ -47,6 +50,7 @@ struct _vchar_drv {
 	unsigned int open_cnt;
 	unsigned long start_time;
 	struct timer_list vchar_ktimer;
+	volatile uint32_t intr_cnt;
 } vchar_drv;
 
 typedef struct {
@@ -56,7 +60,7 @@ typedef struct {
 
 
 
-/****************************** Device Specific - START *****************************/
+/* *************************************************************************************** Device Specific - START ************************************************************************************** */
 /* init device */
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
@@ -194,14 +198,27 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 	}
 }
 
-/* ham xu ly tin hieu ngat gui tu thiet bi */
+/* ISR from device */
+void vchar_hw_bh_task(unsigned long arg) {
+	uint32_t* intr_cnt_p = (uint32_t*)arg;
+	printk(KERN_INFO "[Bottom-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), *intr_cnt_p);
+}
 
-/******************************* device specific - END *****************************/
+DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+
+irqreturn_t vchar_hw_isr(int irq, void* dev) {
+	// top-half task
+	vchar_drv.intr_cnt++;
+	// bottom-half task
+	tasklet_schedule(&vchar_static_tasklet);
+	return IRQ_HANDLED;
+}
+/* **************************************************************************************** Device specific - END ************************************************************************************** */
 
 
 
-/******************************** OS specific - START *******************************/
-/* entry points functions for device file */
+/* ***************************************************************************************** OS specific - START **************************************************************************************** */
+/* ***************************** entry points functions for device file ***************************** */
 static int vchar_driver_open(struct inode *inode, struct file *flip) {
 	vchar_drv.start_time = jiffies;
 	vchar_drv.open_cnt++;
@@ -338,7 +355,7 @@ static struct file_operations fops = {
 
 
 
-/* entry points functions for file in procfs */
+/* ***************************** entry points functions for file in procfs ***************************** */
 static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
 	msg = kmalloc(256, GFP_KERNEL);
@@ -408,7 +425,7 @@ static struct file_operations proc_fops = {
 
 
 
-/* handle and config kernel timer */
+/* *************************************** handle, config kernel timer and send interrupt signal *************************************** */
 static void handle_timer(unsigned long data) {
 	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
 	if (!pData) {
@@ -418,10 +435,12 @@ static void handle_timer(unsigned long data) {
 
 	++pData->param1;
 	--pData->param2;
-	printk(KERN_INFO "Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
+	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
 
-	// change kernel timer to continue to task again
-	mod_timer(&vchar_drv.vchar_ktimer, jiffies + 10*HZ);
+	asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
+	printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
+
+	mod_timer(&vchar_drv.vchar_ktimer, jiffies + 10*HZ); // change kernel timer to continue to task again
 }
 
 static void config_timer(struct timer_list* ktimer) {
@@ -433,7 +452,7 @@ static void config_timer(struct timer_list* ktimer) {
 
 
 
-/* init driver */
+/* *********************************************************** init driver *********************************************************** */
 static int __init vchar_driver_init(void)
 {
 	int ret;	
@@ -503,7 +522,12 @@ static int __init vchar_driver_init(void)
 	config_timer(&vchar_drv.vchar_ktimer);
 	add_timer(&vchar_drv.vchar_ktimer);
 
-	/* dang ky ham xu ly ngat */
+	/* register ISR */
+	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
+	if (ret) {
+		printk(KERN_ERR "Failed to register ISR\n");
+		goto failed_create_proc;
+	}
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
@@ -525,10 +549,12 @@ failed_register_device_number:
 
 
 
-/* exit driver */
+/* ************************************************* exit driver ************************************************* */
 static void __exit vchar_driver_exit(void)
 {
-	/* huy dang ky xu ly ngat */
+	/* unregister ISR */
+	tasklet_kill(&vchar_static_tasklet);
+	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
 
 	/* remove kernel timer */
 	del_timer(&vchar_drv.vchar_ktimer);
@@ -554,7 +580,7 @@ static void __exit vchar_driver_exit(void)
 
 	printk(KERN_INFO "Exit virtual character driver\n");
 }
-/********************************* OS specific - END ********************************/
+/* ****************************************************************************************** OS specific - END ***************************************************************************************** */
 
 
 
