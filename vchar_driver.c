@@ -18,7 +18,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.7"
+#define DRIVER_VERSION "1.8"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -43,16 +43,17 @@ typedef struct {
 } vchar_dev_t;
 
 struct _vchar_drv {
-	dev_t dev_num;					// device number
-	struct class *dev_class;			// class of device
-	struct device *dev;				// device
-	vchar_dev_t *vchar_hw;				// contains registers of device
-	struct cdev *vcdev;				// for device file operations
-	unsigned int open_cnt;				// number of times to open device file
-	unsigned long start_time;			// time which starts opening device file
-	struct timer_list vchar_ktimer;			// kernel timer
-	volatile uint32_t intr_cnt;			// interrupt counter
-	struct tasklet_struct* vchar_dynamic_tasklet;	// dynamic tasklet
+	dev_t dev_num;						// device number
+	struct class *dev_class;				// class of device
+	struct device *dev;					// device
+	vchar_dev_t *vchar_hw;					// contains registers of device
+	struct cdev *vcdev;					// for device file operations
+	unsigned int open_cnt;					// number of times to open device file
+	unsigned long start_time;				// time which starts opening device file
+	struct timer_list vchar_ktimer;				// kernel timer
+	volatile uint32_t intr_cnt;				// interrupt counter
+	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
+	struct workqueue_struct* vchar_user_workqueue;		// dynamic workqueue
 } vchar_drv;
 
 typedef struct {	// for task of kernel timer
@@ -221,8 +222,10 @@ irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	/* bottom-half task */
 	// tasklet_schedule(&vchar_static_tasklet);
 	// tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
-	schedule_work_on(0, &vchar_static_work);
+	// schedule_work_on(0, &vchar_static_work);
 	// schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);  ///// FAILED
+	queue_work_on(0, vchar_drv.vchar_user_workqueue, &vchar_static_work);
+	// queue_delayed_work_on(1, vchar_drv.vchar_user_workqueue, &vchar_static_delayed_work, 2*HZ);	///// FAILED
 
 	return IRQ_HANDLED;
 }
@@ -527,6 +530,7 @@ static int __init vchar_driver_init(void)
 	/* Create file /proc/vchar_proc */
 	if (proc_create("vchar_proc", 666, NULL, &proc_fops) == NULL) {
 		printk(KERN_ERR "Failed to create file in procfs\n");
+		ret = -1;
 		goto failed_create_proc;
 	}
 
@@ -551,11 +555,19 @@ static int __init vchar_driver_init(void)
 	}
 	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);*/
 
+	vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
+	if (!vchar_drv.vchar_user_workqueue) {
+		printk(KERN_ERR "Failed to create workqueue\n");
+		ret = -1;		
+		goto failed_create_workqueue;
+	}
+
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
+failed_create_workqueue:
 //failed_create_tasklet:
-	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
@@ -581,6 +593,7 @@ static void __exit vchar_driver_exit(void)
 	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
 	cancel_work_sync(&vchar_static_work);
 	//cancel_delayed_work_sync(&vchar_static_delayed_work);
+	destroy_workqueue(vchar_drv.vchar_user_workqueue);
 	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
 
 	/* remove kernel timer */
