@@ -12,12 +12,13 @@
 #include <linux/delay.h>	// contains functions which are related to delay and sleep
 #include <linux/timer.h>	// contains functions which are related to kernel timer
 #include <linux/interrupt.h>	// contains functions which are related to interrupt
+#include <linux/workqueue.h>	// contains functions which are related to workqueue
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.6"
+#define DRIVER_VERSION "1.7"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
@@ -42,19 +43,19 @@ typedef struct {
 } vchar_dev_t;
 
 struct _vchar_drv {
-	dev_t dev_num;
-	struct class *dev_class;
-	struct device *dev;
-	vchar_dev_t *vchar_hw;
-	struct cdev *vcdev;
-	unsigned int open_cnt;
-	unsigned long start_time;
-	struct timer_list vchar_ktimer;
-	volatile uint32_t intr_cnt;
-	struct tasklet_struct* vchar_dynamic_tasklet;
+	dev_t dev_num;					// device number
+	struct class *dev_class;			// class of device
+	struct device *dev;				// device
+	vchar_dev_t *vchar_hw;				// contains registers of device
+	struct cdev *vcdev;				// for device file operations
+	unsigned int open_cnt;				// number of times to open device file
+	unsigned long start_time;			// time which starts opening device file
+	struct timer_list vchar_ktimer;			// kernel timer
+	volatile uint32_t intr_cnt;			// interrupt counter
+	struct tasklet_struct* vchar_dynamic_tasklet;	// dynamic tasklet
 } vchar_drv;
 
-typedef struct {
+typedef struct {	// for task of kernel timer
 	int param1;
 	int param2;
 } vchar_ktimer_data_t;
@@ -200,20 +201,28 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 }
 
 /* ISR from device */
-void vchar_hw_bh_task(unsigned long arg) {
+
+/* void vchar_hw_bh_task(unsigned long arg) {
 	uint32_t* intr_cnt_p = (uint32_t*)arg;
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), *intr_cnt_p);
 }
+DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt); */
 
-// DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+void vchar_hw_bh_task(struct work_struct* task) {
+	printk(KERN_INFO "[Bottom-half task] [CPU %d] ... \n", smp_processor_id());
+}
+DECLARE_WORK(vchar_static_work, vchar_hw_bh_task);
+// DECLARE_DELAYED_WORK(vchar_static_delayed_work, vchar_hw_bh_task);	///// FAILED
 
 irqreturn_t vchar_hw_isr(int irq, void* dev) {
-	// top-half task
+	/* top-half task */
 	vchar_drv.intr_cnt++;
 
-	// bottom-half task
+	/* bottom-half task */
 	// tasklet_schedule(&vchar_static_tasklet);
-	tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
+	// tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
+	schedule_work_on(0, &vchar_static_work);
+	// schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);  ///// FAILED
 
 	return IRQ_HANDLED;
 }
@@ -437,9 +446,9 @@ static void handle_timer(unsigned long data) {
 		return;
 	}
 
-	++pData->param1;
+	/*++pData->param1;
 	--pData->param2;
-	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
+	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);*/
 
 	asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
 	printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
@@ -533,20 +542,20 @@ static int __init vchar_driver_init(void)
 		goto failed_create_proc;
 	}
 
-	/* create tasklet for bottom-half task */
-	vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
+	/* create tasklet dynamically for bottom-half task */
+	/*vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
 	if (!vchar_drv.vchar_dynamic_tasklet) {
 		printk(KERN_ERR "Failed to allocate memory for tasklet\n");
 		ret = -ENOMEM;		
 		goto failed_create_tasklet;
 	}
-	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);*/
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
-failed_create_tasklet:
-	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+//failed_create_tasklet:
+	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
@@ -568,8 +577,10 @@ failed_register_device_number:
 static void __exit vchar_driver_exit(void)
 {
 	/* unregister ISR */
-	tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
 	//tasklet_kill(&vchar_static_tasklet);
+	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
+	cancel_work_sync(&vchar_static_work);
+	//cancel_delayed_work_sync(&vchar_static_delayed_work);
 	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
 
 	/* remove kernel timer */
