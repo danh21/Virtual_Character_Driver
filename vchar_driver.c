@@ -18,13 +18,15 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.8"
+#define DRIVER_VERSION "1.9"
 
 #define MAGIC_NUM 21		// ID of driver
-#define VCHAR_CLR_DATA_REGS 	_IO(MAGIC_NUM, 0)
-#define VCHAR_GET_STT_REGS 	_IOR(MAGIC_NUM, 1, stt_regs_t *)
-#define VCHAR_SET_RD_DATA_REGS 	_IOW(MAGIC_NUM, 2, unsigned char *)
-#define VCHAR_SET_WR_DATA_REGS 	_IOW(MAGIC_NUM, 3, unsigned char *)
+#define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
+#define VCHAR_GET_STT_REGS 			_IOR(MAGIC_NUM, 1, stt_regs_t *)
+#define VCHAR_SET_RD_DATA_REGS 			_IOW(MAGIC_NUM, 2, unsigned char *)
+#define VCHAR_SET_WR_DATA_REGS 			_IOW(MAGIC_NUM, 3, unsigned char *)
+#define VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 4)
+#define VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 5)
 
 #define IRQ_NUMBER 11
 
@@ -53,7 +55,8 @@ struct _vchar_drv {
 	struct timer_list vchar_ktimer;				// kernel timer
 	volatile uint32_t intr_cnt;				// interrupt counter
 	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
-	struct workqueue_struct* vchar_user_workqueue;		// dynamic workqueue
+	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue
+	unsigned int critical_resource;					// data in critical resource
 } vchar_drv;
 
 typedef struct {	// for task of kernel timer
@@ -324,6 +327,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 	int ret = 0;
 	stt_regs_t status;
 	unsigned char isReadEnable, isWriteEnable;
+	printk(KERN_INFO "Handle ioctl event with command (%u)\n", cmd);
 	switch (cmd) {
 		case VCHAR_CLR_DATA_REGS:
 			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
@@ -355,6 +359,12 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			}
 			vchar_hw_enable_write(vchar_drv.vchar_hw, isWriteEnable);
 			printk(KERN_INFO "Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
+			break;
+		case VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE:
+			vchar_drv.critical_resource++;
+			break;
+		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:
+			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
 			break;
 	}
 	return ret;
@@ -535,16 +545,16 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* Init, config, register kernel timer */
-	init_timer(&vchar_drv.vchar_ktimer);
+	/*init_timer(&vchar_drv.vchar_ktimer);
 	config_timer(&vchar_drv.vchar_ktimer);
-	add_timer(&vchar_drv.vchar_ktimer);
+	add_timer(&vchar_drv.vchar_ktimer);*/
 
 	/* register ISR */
-	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
+	/*ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
 	if (ret) {
 		printk(KERN_ERR "Failed to register ISR\n");
 		goto failed_create_proc;
-	}
+	}*/
 
 	/* create tasklet dynamically for bottom-half task */
 	/*vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);

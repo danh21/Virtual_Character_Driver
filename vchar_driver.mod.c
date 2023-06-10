@@ -28,9 +28,6 @@ __attribute__((section("__versions"))) = {
 	{ 0xacbfe419, __VMLINUX_SYMBOL_STR(device_destroy) },
 	{ 0xf20dabd8, __VMLINUX_SYMBOL_STR(free_irq) },
 	{ 0x43a53735, __VMLINUX_SYMBOL_STR(__alloc_workqueue_key) },
-	{ 0xd6b8e852, __VMLINUX_SYMBOL_STR(request_threaded_irq) },
-	{ 0xbe2c0274, __VMLINUX_SYMBOL_STR(add_timer) },
-	{ 0x593a99b, __VMLINUX_SYMBOL_STR(init_timer_key) },
 	{ 0x8c34c149, __VMLINUX_SYMBOL_STR(proc_create_data) },
 	{ 0x5f675a65, __VMLINUX_SYMBOL_STR(cdev_add) },
 	{ 0xdacd8618, __VMLINUX_SYMBOL_STR(cdev_init) },
@@ -38,6 +35,7 @@ __attribute__((section("__versions"))) = {
 	{ 0x196103b4, __VMLINUX_SYMBOL_STR(device_create) },
 	{ 0x7e5df8e3, __VMLINUX_SYMBOL_STR(__class_create) },
 	{ 0x29537c9e, __VMLINUX_SYMBOL_STR(alloc_chrdev_region) },
+	{ 0x2e0d2f7f, __VMLINUX_SYMBOL_STR(queue_work_on) },
 	{ 0xf9a482f9, __VMLINUX_SYMBOL_STR(msleep) },
 	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
 	{ 0x4f68e5c9, __VMLINUX_SYMBOL_STR(do_gettimeofday) },
@@ -48,7 +46,6 @@ __attribute__((section("__versions"))) = {
 	{ 0xd2b09ce5, __VMLINUX_SYMBOL_STR(__kmalloc) },
 	{ 0x34184afe, __VMLINUX_SYMBOL_STR(current_kernel_time) },
 	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
-	{ 0x8834396c, __VMLINUX_SYMBOL_STR(mod_timer) },
 	{ 0xf0fdf6cb, __VMLINUX_SYMBOL_STR(__stack_chk_fail) },
 	{ 0x9a1fc4b4, __VMLINUX_SYMBOL_STR(jiffies_to_timeval) },
 	{ 0x9c3df9b4, __VMLINUX_SYMBOL_STR(seq_read) },
@@ -58,7 +55,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x74df1d4, __VMLINUX_SYMBOL_STR(seq_printf) },
 	{ 0x257f3887, __VMLINUX_SYMBOL_STR(seq_open) },
 	{ 0x4f897611, __VMLINUX_SYMBOL_STR(seq_release) },
-	{ 0x2e0d2f7f, __VMLINUX_SYMBOL_STR(queue_work_on) },
 	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
 	{ 0x7d11c268, __VMLINUX_SYMBOL_STR(jiffies) },
 	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
@@ -72,7 +68,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "91BD6149A830E798F6CC097");
+MODULE_INFO(srcversion, "899D0BC88C176D1DDB70EFE");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
