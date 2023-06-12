@@ -19,3 +19,7 @@
     - To test strace:
         + Open Terminal in Strace folder
         + Enter cmd: strace ./testStrace
+    - To create race condition:
+        + Open terminal in demo_RaceCondition folder
+	    + Enter cmd: ./concurrency.sh
+        + Check data in critical resource by entering cmd: ./display_CR

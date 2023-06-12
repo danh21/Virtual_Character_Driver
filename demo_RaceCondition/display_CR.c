@@ -4,8 +4,8 @@
 #include <sys/ioctl.h>
 
 #define DEVICE_NODE "/dev/vchar_dev"
-#define MAGICAL_NUM 21
-#define DISPLAY_DATA_IN_CRITICAL_RESOURCE _IO(MAGICAL_NUM, 5)
+#define MAGIC_NUM 21
+#define DISPLAY_DATA_IN_CRITICAL_RESOURCE _IO(MAGIC_NUM, 5)
 
 int main()
 {

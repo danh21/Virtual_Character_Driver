@@ -20,14 +20,9 @@ __attribute__((section("__versions"))) = {
 	{ 0x28950ef1, __VMLINUX_SYMBOL_STR(module_layout) },
 	{ 0x3fa89e8f, __VMLINUX_SYMBOL_STR(cdev_del) },
 	{ 0xa16aae11, __VMLINUX_SYMBOL_STR(remove_proc_entry) },
-	{ 0xc996d097, __VMLINUX_SYMBOL_STR(del_timer) },
-	{ 0x8c03d20c, __VMLINUX_SYMBOL_STR(destroy_workqueue) },
-	{ 0x88bfa7e, __VMLINUX_SYMBOL_STR(cancel_work_sync) },
 	{ 0x7485e15e, __VMLINUX_SYMBOL_STR(unregister_chrdev_region) },
 	{ 0x450c190, __VMLINUX_SYMBOL_STR(class_destroy) },
 	{ 0xacbfe419, __VMLINUX_SYMBOL_STR(device_destroy) },
-	{ 0xf20dabd8, __VMLINUX_SYMBOL_STR(free_irq) },
-	{ 0x43a53735, __VMLINUX_SYMBOL_STR(__alloc_workqueue_key) },
 	{ 0x8c34c149, __VMLINUX_SYMBOL_STR(proc_create_data) },
 	{ 0x5f675a65, __VMLINUX_SYMBOL_STR(cdev_add) },
 	{ 0xdacd8618, __VMLINUX_SYMBOL_STR(cdev_init) },
@@ -35,7 +30,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x196103b4, __VMLINUX_SYMBOL_STR(device_create) },
 	{ 0x7e5df8e3, __VMLINUX_SYMBOL_STR(__class_create) },
 	{ 0x29537c9e, __VMLINUX_SYMBOL_STR(alloc_chrdev_region) },
-	{ 0x2e0d2f7f, __VMLINUX_SYMBOL_STR(queue_work_on) },
 	{ 0xf9a482f9, __VMLINUX_SYMBOL_STR(msleep) },
 	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
 	{ 0x4f68e5c9, __VMLINUX_SYMBOL_STR(do_gettimeofday) },
@@ -58,7 +52,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
 	{ 0x7d11c268, __VMLINUX_SYMBOL_STR(jiffies) },
 	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
-	{ 0x54efb5d6, __VMLINUX_SYMBOL_STR(cpu_number) },
 	{ 0xbdfb6dbb, __VMLINUX_SYMBOL_STR(__fentry__) },
 };
 
@@ -68,7 +61,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "899D0BC88C176D1DDB70EFE");
+MODULE_INFO(srcversion, "073457DC6C4924C9DCDB787");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");

@@ -18,7 +18,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "1.9"
+#define DRIVER_VERSION "2.0"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -27,6 +27,7 @@
 #define VCHAR_SET_WR_DATA_REGS 			_IOW(MAGIC_NUM, 3, unsigned char *)
 #define VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 4)
 #define VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 5)
+#define VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 6)
 
 #define IRQ_NUMBER 11
 
@@ -55,8 +56,8 @@ struct _vchar_drv {
 	struct timer_list vchar_ktimer;				// kernel timer
 	volatile uint32_t intr_cnt;				// interrupt counter
 	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
-	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue
-	unsigned int critical_resource;					// data in critical resource
+	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue	
+	atomic_t critical_resource;				// data in critical resource
 } vchar_drv;
 
 typedef struct {	// for task of kernel timer
@@ -212,26 +213,23 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 }
 DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt); */
 
-void vchar_hw_bh_task(struct work_struct* task) {
+/*void vchar_hw_bh_task(struct work_struct* task) {
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] ... \n", smp_processor_id());
 }
 DECLARE_WORK(vchar_static_work, vchar_hw_bh_task);
-// DECLARE_DELAYED_WORK(vchar_static_delayed_work, vchar_hw_bh_task);	///// FAILED
 
 irqreturn_t vchar_hw_isr(int irq, void* dev) {
-	/* top-half task */
+	// top-half task
 	vchar_drv.intr_cnt++;
 
-	/* bottom-half task */
+	// bottom-half task
 	// tasklet_schedule(&vchar_static_tasklet);
 	// tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
 	// schedule_work_on(0, &vchar_static_work);
-	// schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);  ///// FAILED
 	queue_work_on(0, vchar_drv.vchar_user_workqueue, &vchar_static_work);
-	// queue_delayed_work_on(1, vchar_drv.vchar_user_workqueue, &vchar_static_delayed_work, 2*HZ);	///// FAILED
 
 	return IRQ_HANDLED;
-}
+}*/
 /* **************************************************************************************** Device specific - END ************************************************************************************** */
 
 
@@ -327,7 +325,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 	int ret = 0;
 	stt_regs_t status;
 	unsigned char isReadEnable, isWriteEnable;
-	printk(KERN_INFO "Handle ioctl event with command (%u)\n", cmd);
+	//printk(KERN_INFO "Handle ioctl event with command (%u)\n", cmd);
 	switch (cmd) {
 		case VCHAR_CLR_DATA_REGS:
 			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
@@ -361,10 +359,13 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			printk(KERN_INFO "Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
 			break;
 		case VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE:
-			vchar_drv.critical_resource++;
+			atomic_inc(&vchar_drv.critical_resource);
 			break;
-		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:
-			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
+		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:			
+			printk(KERN_INFO "Data in critical resource: %d\n", atomic_read(&vchar_drv.critical_resource));
+			break;
+		case VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE:
+			atomic_set(&vchar_drv.critical_resource, 0);
 			break;
 	}
 	return ret;
@@ -452,16 +453,16 @@ static struct file_operations proc_fops = {
 
 
 /* *************************************** handle, config kernel timer and send interrupt signal *************************************** */
-static void handle_timer(unsigned long data) {
+/*static void handle_timer(unsigned long data) {
 	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
 	if (!pData) {
 		printk(KERN_ERR "Can not handle a NULL pointer\n");
 		return;
 	}
 
-	/*++pData->param1;
+	++pData->param1;
 	--pData->param2;
-	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);*/
+	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
 
 	asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
 	printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
@@ -474,7 +475,7 @@ static void config_timer(struct timer_list* ktimer) {
 	ktimer->expires = jiffies + 10 * HZ;
 	ktimer->function = handle_timer;
 	ktimer->data = (unsigned long)&data;
-}
+}*/
 
 
 
@@ -565,19 +566,19 @@ static int __init vchar_driver_init(void)
 	}
 	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);*/
 
-	vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
+	/* vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
 	if (!vchar_drv.vchar_user_workqueue) {
 		printk(KERN_ERR "Failed to create workqueue\n");
 		ret = -1;		
 		goto failed_create_workqueue;
-	}
+	} */
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
-failed_create_workqueue:
+//failed_create_workqueue:
 //failed_create_tasklet:
-	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
@@ -601,13 +602,12 @@ static void __exit vchar_driver_exit(void)
 	/* unregister ISR */
 	//tasklet_kill(&vchar_static_tasklet);
 	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
-	cancel_work_sync(&vchar_static_work);
-	//cancel_delayed_work_sync(&vchar_static_delayed_work);
-	destroy_workqueue(vchar_drv.vchar_user_workqueue);
-	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
+	//cancel_work_sync(&vchar_static_work);
+	//destroy_workqueue(vchar_drv.vchar_user_workqueue);
+	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);	
 
 	/* remove kernel timer */
-	del_timer(&vchar_drv.vchar_ktimer);
+	//del_timer(&vchar_drv.vchar_ktimer);
 	
 	/* remove file /proc/vchar_proc */
 	remove_proc_entry("vchar_proc", NULL);
