@@ -30,6 +30,8 @@ __attribute__((section("__versions"))) = {
 	{ 0x196103b4, __VMLINUX_SYMBOL_STR(device_create) },
 	{ 0x7e5df8e3, __VMLINUX_SYMBOL_STR(__class_create) },
 	{ 0x29537c9e, __VMLINUX_SYMBOL_STR(alloc_chrdev_region) },
+	{ 0x784213a6, __VMLINUX_SYMBOL_STR(pv_lock_ops) },
+	{ 0x4b7dcf38, __VMLINUX_SYMBOL_STR(_raw_qspin_lock) },
 	{ 0xf9a482f9, __VMLINUX_SYMBOL_STR(msleep) },
 	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
 	{ 0x4f68e5c9, __VMLINUX_SYMBOL_STR(do_gettimeofday) },
@@ -61,7 +63,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "073457DC6C4924C9DCDB787");
+MODULE_INFO(srcversion, "A847D60589F876523960438");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
