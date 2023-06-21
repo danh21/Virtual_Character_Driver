@@ -15,12 +15,13 @@
 #include <linux/workqueue.h>	// contains functions which are related to workqueue
 #include <linux/spinlock.h>	// contains functions which are related to spinlock
 #include <linux/mutex.h>	// contains functions which are related to mutex
+#include <linux/semaphore.h>	// contains functions which are related to semaphore
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.2"
+#define DRIVER_VERSION "2.3"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -62,7 +63,8 @@ struct _vchar_drv {
 	unsigned int critical_resource;				// data in critical resource
 	//atomic_t critical_resource;				// data in critical resource
 	//spinlock_t vchar_spinlock;				// spinlock protects critical resource
-	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
+	//struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
+	struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -382,9 +384,16 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			*/
 	
 			// --------------------------- mutex method
+			/*			
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource++;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
+			*/
+
+			// --------------------------- semaphore method			
+			down(&vchar_drv.vchar_semaphore);
+			vchar_drv.critical_resource++;
+			up(&vchar_drv.vchar_semaphore);
 			break;
 		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:			
 			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
@@ -402,9 +411,16 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			*/
 
 			// --------------------------- mutex method
+			/*
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource = 0;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
+			*/	
+
+			// --------------------------- semaphore method			
+			down(&vchar_drv.vchar_semaphore);
+			vchar_drv.critical_resource = 0;
+			up(&vchar_drv.vchar_semaphore);		
 			break;
 	}
 	return ret;
@@ -625,7 +641,10 @@ static int __init vchar_driver_init(void)
 	// spin_lock_init(&vchar_drv.vchar_spinlock);
 
 	/* init mutex lock */
-	mutex_init(&vchar_drv.vchar_mutexlock);	
+	// mutex_init(&vchar_drv.vchar_mutexlock);	
+	
+	/* init semaphore */
+	sema_init(&vchar_drv.vchar_semaphore, 1);	
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
