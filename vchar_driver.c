@@ -14,12 +14,13 @@
 #include <linux/interrupt.h>	// contains functions which are related to interrupt
 #include <linux/workqueue.h>	// contains functions which are related to workqueue
 #include <linux/spinlock.h>	// contains functions which are related to spinlock
+#include <linux/mutex.h>	// contains functions which are related to mutex
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.1"
+#define DRIVER_VERSION "2.2"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -60,7 +61,8 @@ struct _vchar_drv {
 	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue	
 	unsigned int critical_resource;				// data in critical resource
 	//atomic_t critical_resource;				// data in critical resource
-	spinlock_t vchar_spinlock;				// spinlock protects critical resource
+	//spinlock_t vchar_spinlock;				// spinlock protects critical resource
+	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -373,9 +375,16 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			// atomic_inc(&vchar_drv.critical_resource);
 			
 			// --------------------------- spinlock method
+			/*
 			spin_lock(&vchar_drv.vchar_spinlock);
 			vchar_drv.critical_resource++;
 			spin_unlock(&vchar_drv.vchar_spinlock);
+			*/
+	
+			// --------------------------- mutex method
+			mutex_lock(&vchar_drv.vchar_mutexlock);
+			vchar_drv.critical_resource++;
+			mutex_unlock(&vchar_drv.vchar_mutexlock);
 			break;
 		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:			
 			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
@@ -386,9 +395,16 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			// atomic_set(&vchar_drv.critical_resource, 0);
 
 			// --------------------------- spinlock method
+			/*			
 			spin_lock(&vchar_drv.vchar_spinlock);
 			vchar_drv.critical_resource = 0;
 			spin_unlock(&vchar_drv.vchar_spinlock);
+			*/
+
+			// --------------------------- mutex method
+			mutex_lock(&vchar_drv.vchar_mutexlock);
+			vchar_drv.critical_resource = 0;
+			mutex_unlock(&vchar_drv.vchar_mutexlock);
 			break;
 	}
 	return ret;
@@ -569,36 +585,47 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* Init, config, register kernel timer */
-	/*init_timer(&vchar_drv.vchar_ktimer);
+	/*
+	init_timer(&vchar_drv.vchar_ktimer);
 	config_timer(&vchar_drv.vchar_ktimer);
-	add_timer(&vchar_drv.vchar_ktimer);*/
+	add_timer(&vchar_drv.vchar_ktimer);
+	*/
 
 	/* register ISR */
-	/*ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
+	/*
+	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
 	if (ret) {
 		printk(KERN_ERR "Failed to register ISR\n");
 		goto failed_create_proc;
-	}*/
+	}
+	*/
 
 	/* create tasklet dynamically for bottom-half task */
-	/*vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
+	/*
+	vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
 	if (!vchar_drv.vchar_dynamic_tasklet) {
 		printk(KERN_ERR "Failed to allocate memory for tasklet\n");
 		ret = -ENOMEM;		
 		goto failed_create_tasklet;
 	}
-	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);*/
+	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+	*/
 	
 	/* create user-defined workqueue */
-	/*vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
+	/*
+	vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
 	if (!vchar_drv.vchar_user_workqueue) {
 		printk(KERN_ERR "Failed to create workqueue\n");
 		ret = -1;		
 		goto failed_create_workqueue;
-	}*/
+	}
+	*/
 
 	/* init spinlock */
-	spin_lock_init(&vchar_drv.vchar_spinlock);
+	// spin_lock_init(&vchar_drv.vchar_spinlock);
+
+	/* init mutex lock */
+	mutex_init(&vchar_drv.vchar_mutexlock);	
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
