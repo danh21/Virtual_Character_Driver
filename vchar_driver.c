@@ -1,7 +1,7 @@
 #include <linux/module.h>	// defines maroes as module_init and module_exit
 #include <linux/fs.h>		// defines functions as allocate/release device number	
 #include <linux/device.h>	// contains functions which handle device file
-#include <linux/slab.h>		// contains functions as kmalloc and kzalloc
+//#include <linux/slab.h>	// contains functions as kmalloc, kzalloc and kfree
 #include <linux/cdev.h>		// contains functions which work with cdev
 #include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
 #include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
@@ -10,18 +10,19 @@
 #include <linux/jiffies.h>	// contains functions to get system uptime
 #include <linux/sched.h>	// contains functions which are related to scheduling
 #include <linux/delay.h>	// contains functions which are related to delay and sleep
-#include <linux/timer.h>	// contains functions which are related to kernel timer
-#include <linux/interrupt.h>	// contains functions which are related to interrupt
-#include <linux/workqueue.h>	// contains functions which are related to workqueue
-#include <linux/spinlock.h>	// contains functions which are related to spinlock
+//#include <linux/timer.h>	// contains functions which are related to kernel timer
+//#include <linux/interrupt.h>	// contains functions which are related to interrupt
+//#include <linux/workqueue.h>	// contains functions which are related to workqueue
+//#include <linux/spinlock.h>	// contains functions which are related to spinlock
 #include <linux/mutex.h>	// contains functions which are related to mutex
-#include <linux/semaphore.h>	// contains functions which are related to semaphore
+//#include <linux/semaphore.h>	// contains functions which are related to semaphore
+#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.3"
+#define DRIVER_VERSION "2.4"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -63,8 +64,8 @@ struct _vchar_drv {
 	unsigned int critical_resource;				// data in critical resource
 	//atomic_t critical_resource;				// data in critical resource
 	//spinlock_t vchar_spinlock;				// spinlock protects critical resource
-	//struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
-	struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
+	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
+	//struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -78,7 +79,8 @@ typedef struct {	// for task of kernel timer
 /* init device */
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
-	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
+	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
+	mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -95,7 +97,8 @@ int vchar_hw_init(vchar_dev_t *hw) {
 
 /* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
-	kfree(hw->ctrl_regs);
+	// kfree(hw->ctrl_regs);
+	vfree(hw->ctrl_regs);
 }
 
 /* read from data regs of device */
@@ -214,17 +217,22 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 
 /* ISR from device */
 
-/* void vchar_hw_bh_task(unsigned long arg) {
+/* 
+void vchar_hw_bh_task(unsigned long arg) {
 	uint32_t* intr_cnt_p = (uint32_t*)arg;
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), *intr_cnt_p);
 }
-DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt); */
+DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt); 
+*/
 
-/*void vchar_hw_bh_task(struct work_struct* task) {
+/*
+void vchar_hw_bh_task(struct work_struct* task) {
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] ... \n", smp_processor_id());
 }
 DECLARE_WORK(vchar_static_work, vchar_hw_bh_task);
+*/
 
+/*
 irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	// ----------------- top-half task
 	vchar_drv.intr_cnt++;
@@ -234,16 +242,17 @@ irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	// tasklet_schedule(&vchar_static_tasklet);
 	// tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
 	
-	// default workqueue
+	// -------- default workqueue
 	// schedule_work_on(0, &vchar_static_work);
 	// schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);
 
-	// user-defined workqueue
+	// -------- user-defined workqueue
 	//queue_work_on(0, vchar_drv.vchar_user_workqueue, &vchar_static_work);
 	//queue_delayed_work_on(1, vchar_drv.vchar_user_workqueue, &vchar_static_delayed_work, 5*HZ);
 
 	return IRQ_HANDLED;
-}*/
+}
+*/
 /* **************************************************************************************** Device specific - END ************************************************************************************** */
 
 
@@ -257,6 +266,8 @@ static int vchar_driver_open(struct inode *inode, struct file *flip) {
 	return 0;
 }
 
+
+
 static int vchar_driver_release(struct inode *inode, struct file *flip) {
 	struct timeval using_time;
 	jiffies_to_timeval(jiffies - vchar_drv.start_time, &using_time);
@@ -265,6 +276,8 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 	return 0;
 }
 
+
+
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
@@ -272,7 +285,8 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 	struct timespec read_time = current_kernel_time();
 	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, read_time.tv_sec, read_time.tv_nsec/1000000);	
 		
-	kernel_buf = kmalloc(len, GFP_KERNEL);
+	// kernel_buf = kmalloc(len, GFP_KERNEL);
+	kernel_buf = vmalloc(len);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -280,7 +294,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 
 	// driver will sleep for a period of at least timeout
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(3 * HZ); // 10s
+	schedule_timeout(3 * HZ); // 3s
 
 	// READ
 	num_bytes = vchar_hw_read_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
@@ -300,6 +314,8 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 	return num_bytes;
 }
 
+
+
 static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
@@ -308,7 +324,8 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	do_gettimeofday(&write_time);
 	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, write_time.tv_sec, write_time.tv_usec/1000);		
 	
-	kernel_buf = kmalloc(len, GFP_KERNEL);
+	//kernel_buf = kmalloc(len, GFP_KERNEL);
+	kernel_buf = vmalloc(len);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -321,7 +338,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	}
 
 	//mdelay(10000);	//10s
-	ssleep(3);	//10s
+	ssleep(3);	//3s
 	
 	// WRITE
 	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
@@ -334,6 +351,8 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	*off += num_bytes;
 	return num_bytes;
 }
+
+
 
 static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned long arg) {
 	int ret = 0;
@@ -384,16 +403,18 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			*/
 	
 			// --------------------------- mutex method
-			/*			
+						
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource++;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
-			*/
+			
 
 			// --------------------------- semaphore method			
+			/*			
 			down(&vchar_drv.vchar_semaphore);
 			vchar_drv.critical_resource++;
 			up(&vchar_drv.vchar_semaphore);
+			*/
 			break;
 		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:			
 			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
@@ -411,20 +432,24 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			*/
 
 			// --------------------------- mutex method
-			/*
+			
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource = 0;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
-			*/	
+				
 
 			// --------------------------- semaphore method			
+			/*			
 			down(&vchar_drv.vchar_semaphore);
 			vchar_drv.critical_resource = 0;
 			up(&vchar_drv.vchar_semaphore);		
+			*/			
 			break;
 	}
 	return ret;
 }
+
+
 
 static struct file_operations fops = {
 	.owner	 	= THIS_MODULE,
@@ -440,7 +465,8 @@ static struct file_operations fops = {
 /* ***************************** entry points functions for file in procfs ***************************** */
 static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
-	msg = kmalloc(256, GFP_KERNEL);
+	// msg = kmalloc(256, GFP_KERNEL);
+	msg = vmalloc(256);	
 	if (!msg) {
 		pr_err("seq_start: failed to allocate memory");
 		return NULL;
@@ -449,12 +475,16 @@ static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	return msg;
 }
 
+
+
 static int vchar_seq_show(struct seq_file *s, void *pData) {
 	char *msg = pData;
 	seq_printf(s, "%s\n", msg);
 	printk(KERN_INFO "seg_show: %s\n", msg);
 	return 0;	// success
 }
+
+
 
 static void* vchar_seq_next(struct seq_file *s, void *pData, loff_t *pos) {
 	char *msg = pData;
@@ -463,10 +493,15 @@ static void* vchar_seq_next(struct seq_file *s, void *pData, loff_t *pos) {
 	return msg;
 }
 
+
+
 static void vchar_seq_stop(struct seq_file *s, void *pData) {
 	printk(KERN_INFO "seq_stop\n");
-	kfree(pData);
+	// kfree(pData);
+	vfree(pData);
 }
+
+
 
 static struct seq_operations seq_ops = {
 	.start = vchar_seq_start,
@@ -476,15 +511,20 @@ static struct seq_operations seq_ops = {
 };
 
 
+
 static int vchar_proc_open(struct inode *inode, struct file *flip) {
 	printk(KERN_INFO "Handle opened event on proc file\n");
 	return seq_open(flip, &seq_ops);
 }
 
+
+
 static int vchar_proc_release(struct inode *inode, struct file *flip) {
 	printk(KERN_INFO "Handle closed event on proc file\n");
 	return seq_release(inode, flip);
 }
+
+
 
 static ssize_t vchar_proc_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld on proc file\n", len, *off);		
@@ -493,10 +533,14 @@ static ssize_t vchar_proc_read(struct file *flip, char __user *user_buf, size_t 
 	return seq_read(flip, user_buf, len, off);
 }
 
+
+
 static ssize_t vchar_proc_write(struct file *flip, const char __user *user_buf, size_t len, loff_t *off) {
 	printk(KERN_INFO "No action to handle writing event on proc file\n");	// read-only
 	return len;
 }
+
+
 
 static struct file_operations proc_fops = {
 	.open	 = vchar_proc_open,
@@ -508,7 +552,8 @@ static struct file_operations proc_fops = {
 
 
 /* *************************************** handle, config kernel timer and send interrupt signal *************************************** */
-/*static void handle_timer(unsigned long data) {
+/*
+static void handle_timer(unsigned long data) {
 	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
 	if (!pData) {
 		printk(KERN_ERR "Can not handle a NULL pointer\n");
@@ -525,12 +570,15 @@ static struct file_operations proc_fops = {
 	mod_timer(&vchar_drv.vchar_ktimer, jiffies + 10*HZ); // change kernel timer to continue to task again
 }
 
+
+
 static void config_timer(struct timer_list* ktimer) {
 	static vchar_ktimer_data_t data;
 	ktimer->expires = jiffies + 10 * HZ;
 	ktimer->function = handle_timer;
 	ktimer->data = (unsigned long)&data;
-}*/
+}
+*/
 
 
 
@@ -565,7 +613,8 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* allocate memory for struct of driver and init */
-	vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
+	// vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
+	vchar_drv.vchar_hw = vmalloc(sizeof(vchar_dev_t));
 	if (!vchar_drv.vchar_hw) {
 		printk(KERN_ERR "Failed to allocate memory for struct of driver\n");
 		ret = -ENOMEM;		
@@ -641,10 +690,10 @@ static int __init vchar_driver_init(void)
 	// spin_lock_init(&vchar_drv.vchar_spinlock);
 
 	/* init mutex lock */
-	// mutex_init(&vchar_drv.vchar_mutexlock);	
+	mutex_init(&vchar_drv.vchar_mutexlock);	
 	
 	/* init semaphore */
-	sema_init(&vchar_drv.vchar_semaphore, 1);	
+	// sema_init(&vchar_drv.vchar_semaphore, 1);	
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
@@ -656,7 +705,8 @@ failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
-	kfree(vchar_drv.vchar_hw);
+	// kfree(vchar_drv.vchar_hw);
+	vfree(vchar_drv.vchar_hw);
 failed_alloc_struct:
 	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);
 failed_create_device:
@@ -676,11 +726,13 @@ static void __exit vchar_driver_exit(void)
 	//tasklet_kill(&vchar_static_tasklet);
 	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
 
-	/*cancel_work_sync(&vchar_static_work);
+	/*
+	cancel_work_sync(&vchar_static_work);
 	cancel_delayed_work_sync(&vchar_static_delayed_work);
 	destroy_workqueue(vchar_drv.vchar_user_workqueue);
 
-	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);*/
+	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+	*/
 
 	/* remove kernel timer */
 	//del_timer(&vchar_drv.vchar_ktimer);
@@ -695,7 +747,8 @@ static void __exit vchar_driver_exit(void)
 	vchar_hw_exit(vchar_drv.vchar_hw);
 
 	/* release memory of struct of the driver */
-	kfree(vchar_drv.vchar_hw);
+	// kfree(vchar_drv.vchar_hw);
+	vfree(vchar_drv.vchar_hw);
 
 	/* delete device file */
 	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);

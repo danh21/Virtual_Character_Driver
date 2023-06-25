@@ -178,7 +178,7 @@ int main() {
 	int fd = -1;
 
 	while (1) {
-		printf("Select one of below options:\n");
+		printf(" ----------------- Select one of below options: ----------------\n");
 		printf("\to (to open device node)\n");
 		printf("\tc (to close device node)\n");
 		printf("\tr (to read data from device node)\n");
