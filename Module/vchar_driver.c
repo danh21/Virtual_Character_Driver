@@ -1,7 +1,7 @@
 #include <linux/module.h>	// defines maroes as module_init and module_exit
 #include <linux/fs.h>		// defines functions as allocate/release device number	
 #include <linux/device.h>	// contains functions which handle device file
-//#include <linux/slab.h>	// contains functions as kmalloc, kzalloc and kfree
+#include <linux/slab.h>		// contains functions which are related to kernel memory allocation
 #include <linux/cdev.h>		// contains functions which work with cdev
 #include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
 #include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
@@ -16,14 +16,14 @@
 //#include <linux/spinlock.h>	// contains functions which are related to spinlock
 #include <linux/mutex.h>	// contains functions which are related to mutex
 //#include <linux/semaphore.h>	// contains functions which are related to semaphore
-#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
-#include <linux/gfp.h>		// contains functions as get_zeroed_page
+//#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
+//#include <linux/gfp.h>	// contains functions as get_zeroed_page
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.5"
+#define DRIVER_VERSION "2.6"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -33,6 +33,8 @@
 #define VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 4)
 #define VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 5)
 #define VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 6)
+
+#define OBJ_LOOKASIDE_SIZE (NUM_DATA_REGS * REG_SIZE)
 
 #define IRQ_NUMBER 11
 
@@ -67,6 +69,7 @@ struct _vchar_drv {
 	//spinlock_t vchar_spinlock;				// spinlock protects critical resource
 	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
 	//struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
+	struct kmem_cache *vchar_lookaside_cache;		// lookaside cache 
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -80,9 +83,9 @@ typedef struct {	// for task of kernel timer
 /* init device */
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
-	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
+	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	// mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
-	mem = (char *)get_zeroed_page(GFP_KERNEL);
+	// mem = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -97,12 +100,16 @@ int vchar_hw_init(vchar_dev_t *hw) {
 	return 0;
 }
 
+
+
 /* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
-	// kfree(hw->ctrl_regs);
+	kfree(hw->ctrl_regs);
 	// vfree(hw->ctrl_regs);
-	free_page((unsigned long)hw->ctrl_regs);
+	// free_page((unsigned long)hw->ctrl_regs);
 }
+
+
 
 /* read from data regs of device */
 int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
@@ -139,6 +146,8 @@ int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf)
 		hw->stt_regs[READ_COUNT_H_REG]++;
 	return read_bytes;
 }
+
+
 
 /* write to data regs of device */
 int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
@@ -178,6 +187,8 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 	return write_bytes;
 }
 
+
+
 /* clear data regs */
 int vchar_hw_clear_data(vchar_dev_t *hw) {
 	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == DISABLE) {
@@ -188,6 +199,8 @@ int vchar_hw_clear_data(vchar_dev_t *hw) {
 	hw->stt_regs[DEVICE_STATUS_REG] &= ~(STT_DATAREGS_OVERFLOW_BIT);
 	return 0;
 }
+
+
 
 /* read status regs */
 void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status) {
@@ -217,6 +230,8 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 		hw->stt_regs[DEVICE_STATUS_REG] &= ~STT_WRITE_ACCESS_BIT;	
 	}
 }
+
+
 
 /* ISR from device */
 
@@ -289,7 +304,8 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, read_time.tv_sec, read_time.tv_nsec/1000000);	
 		
 	// kernel_buf = kmalloc(len, GFP_KERNEL);
-	kernel_buf = vmalloc(len);
+	// kernel_buf = vmalloc(len);
+	kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -313,6 +329,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 		return -EFAULT;
 	}
 
+	kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -327,8 +344,9 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	do_gettimeofday(&write_time);
 	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, write_time.tv_sec, write_time.tv_usec/1000);		
 	
-	//kernel_buf = kmalloc(len, GFP_KERNEL);
-	kernel_buf = vmalloc(len);
+	// kernel_buf = kmalloc(len, GFP_KERNEL);
+	// kernel_buf = vmalloc(len);
+	kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -351,6 +369,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		return -EFAULT; // bad address
 	}
 	
+	kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -361,7 +380,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 	int ret = 0;
 	stt_regs_t status;
 	unsigned char isReadEnable, isWriteEnable;
-	//printk(KERN_INFO "Handle ioctl event with command (%u)\n", cmd);
+	printk(KERN_INFO "Handle ioctl event with command (%u)\n", cmd);
 	switch (cmd) {
 		case VCHAR_CLR_DATA_REGS:
 			ret = vchar_hw_clear_data(vchar_drv.vchar_hw);
@@ -468,8 +487,8 @@ static struct file_operations fops = {
 /* ***************************** entry points functions for file in procfs ***************************** */
 static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
-	// msg = kmalloc(256, GFP_KERNEL);
-	msg = vmalloc(256);	
+	msg = kmalloc(256, GFP_KERNEL);
+	// msg = vmalloc(256);	
 	if (!msg) {
 		pr_err("seq_start: failed to allocate memory");
 		return NULL;
@@ -500,8 +519,8 @@ static void* vchar_seq_next(struct seq_file *s, void *pData, loff_t *pos) {
 
 static void vchar_seq_stop(struct seq_file *s, void *pData) {
 	printk(KERN_INFO "seq_stop\n");
-	// kfree(pData);
-	vfree(pData);
+	kfree(pData);
+	// vfree(pData);
 }
 
 
@@ -586,6 +605,13 @@ static void config_timer(struct timer_list* ktimer) {
 
 
 /* *********************************************************** init driver *********************************************************** */
+void init_obj_lookaside(void *obj) {
+	//char *p = (char *)obj;
+	memset(obj, 0, OBJ_LOOKASIDE_SIZE);
+}
+
+
+
 static int __init vchar_driver_init(void)
 {
 	int ret;	
@@ -616,8 +642,8 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* allocate memory for struct of driver and init */
-	// vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
-	vchar_drv.vchar_hw = vmalloc(sizeof(vchar_dev_t));
+	vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
+	// vchar_drv.vchar_hw = vmalloc(sizeof(vchar_dev_t));
 	if (!vchar_drv.vchar_hw) {
 		printk(KERN_ERR "Failed to allocate memory for struct of driver\n");
 		ret = -ENOMEM;		
@@ -698,18 +724,28 @@ static int __init vchar_driver_init(void)
 	/* init semaphore */
 	// sema_init(&vchar_drv.vchar_semaphore, 1);	
 
+	/* init lookaside cache */
+	vchar_drv.vchar_lookaside_cache = kmem_cache_create("vchar_lookaside_cache", OBJ_LOOKASIDE_SIZE, 0, SLAB_PANIC, init_obj_lookaside);
+	if (!vchar_drv.vchar_lookaside_cache) {
+		printk(KERN_ERR "Failed to allocate memory for lookaside cache\n");
+		ret = -ENOMEM;		
+		goto failed_create_lookaside;
+	}
+
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
 //failed_create_workqueue:
 //failed_create_tasklet:
 	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+failed_create_lookaside:
+	cdev_del(vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
-	// kfree(vchar_drv.vchar_hw);
-	vfree(vchar_drv.vchar_hw);
+	kfree(vchar_drv.vchar_hw);
+	// vfree(vchar_drv.vchar_hw);
 failed_alloc_struct:
 	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);
 failed_create_device:
@@ -728,7 +764,6 @@ static void __exit vchar_driver_exit(void)
 	/* unregister ISR */
 	//tasklet_kill(&vchar_static_tasklet);
 	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
-
 	/*
 	cancel_work_sync(&vchar_static_work);
 	cancel_delayed_work_sync(&vchar_static_delayed_work);
@@ -739,6 +774,9 @@ static void __exit vchar_driver_exit(void)
 
 	/* remove kernel timer */
 	//del_timer(&vchar_drv.vchar_ktimer);
+
+	/* remove lookaside cache */
+	kmem_cache_destroy(vchar_drv.vchar_lookaside_cache);
 	
 	/* remove file /proc/vchar_proc */
 	remove_proc_entry("vchar_proc", NULL);

@@ -18,11 +18,14 @@ static const struct modversion_info ____versions[]
 __used
 __attribute__((section("__versions"))) = {
 	{ 0x28950ef1, __VMLINUX_SYMBOL_STR(module_layout) },
-	{ 0x3fa89e8f, __VMLINUX_SYMBOL_STR(cdev_del) },
+	{ 0x999e8297, __VMLINUX_SYMBOL_STR(vfree) },
 	{ 0xa16aae11, __VMLINUX_SYMBOL_STR(remove_proc_entry) },
+	{ 0xacfa5975, __VMLINUX_SYMBOL_STR(kmem_cache_destroy) },
 	{ 0x7485e15e, __VMLINUX_SYMBOL_STR(unregister_chrdev_region) },
 	{ 0x450c190, __VMLINUX_SYMBOL_STR(class_destroy) },
 	{ 0xacbfe419, __VMLINUX_SYMBOL_STR(device_destroy) },
+	{ 0x3fa89e8f, __VMLINUX_SYMBOL_STR(cdev_del) },
+	{ 0xaf5517a9, __VMLINUX_SYMBOL_STR(kmem_cache_create) },
 	{ 0x9a025cd5, __VMLINUX_SYMBOL_STR(__mutex_init) },
 	{ 0x8c34c149, __VMLINUX_SYMBOL_STR(proc_create_data) },
 	{ 0x5f675a65, __VMLINUX_SYMBOL_STR(cdev_add) },
@@ -36,23 +39,24 @@ __attribute__((section("__versions"))) = {
 	{ 0xf9a482f9, __VMLINUX_SYMBOL_STR(msleep) },
 	{ 0x77e2f33, __VMLINUX_SYMBOL_STR(_copy_from_user) },
 	{ 0x4f68e5c9, __VMLINUX_SYMBOL_STR(do_gettimeofday) },
+	{ 0x19ee3d71, __VMLINUX_SYMBOL_STR(kmem_cache_free) },
 	{ 0x71de9b3f, __VMLINUX_SYMBOL_STR(_copy_to_user) },
 	{ 0x88db9f48, __VMLINUX_SYMBOL_STR(__check_object_size) },
 	{ 0xd62c833f, __VMLINUX_SYMBOL_STR(schedule_timeout) },
 	{ 0xb8c7ff88, __VMLINUX_SYMBOL_STR(current_task) },
+	{ 0xd11b7a3e, __VMLINUX_SYMBOL_STR(kmem_cache_alloc) },
 	{ 0x34184afe, __VMLINUX_SYMBOL_STR(current_kernel_time) },
 	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
-	{ 0x4302d0eb, __VMLINUX_SYMBOL_STR(free_pages) },
-	{ 0x9b388444, __VMLINUX_SYMBOL_STR(get_zeroed_page) },
 	{ 0xf0fdf6cb, __VMLINUX_SYMBOL_STR(__stack_chk_fail) },
 	{ 0x9a1fc4b4, __VMLINUX_SYMBOL_STR(jiffies_to_timeval) },
 	{ 0x9c3df9b4, __VMLINUX_SYMBOL_STR(seq_read) },
-	{ 0xd6ee688f, __VMLINUX_SYMBOL_STR(vmalloc) },
+	{ 0x41ec4c1a, __VMLINUX_SYMBOL_STR(kmem_cache_alloc_trace) },
+	{ 0x98ab5c8d, __VMLINUX_SYMBOL_STR(kmalloc_caches) },
 	{ 0x91715312, __VMLINUX_SYMBOL_STR(sprintf) },
 	{ 0x74df1d4, __VMLINUX_SYMBOL_STR(seq_printf) },
 	{ 0x257f3887, __VMLINUX_SYMBOL_STR(seq_open) },
 	{ 0x4f897611, __VMLINUX_SYMBOL_STR(seq_release) },
-	{ 0x999e8297, __VMLINUX_SYMBOL_STR(vfree) },
+	{ 0x37a0cba, __VMLINUX_SYMBOL_STR(kfree) },
 	{ 0x7d11c268, __VMLINUX_SYMBOL_STR(jiffies) },
 	{ 0x27e1a049, __VMLINUX_SYMBOL_STR(printk) },
 	{ 0xbdfb6dbb, __VMLINUX_SYMBOL_STR(__fentry__) },
@@ -64,7 +68,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "3B1419BE1C2DA7E5354D302");
+MODULE_INFO(srcversion, "508A76AA55135D9D6767E12");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
