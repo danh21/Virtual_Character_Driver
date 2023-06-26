@@ -17,12 +17,13 @@
 #include <linux/mutex.h>	// contains functions which are related to mutex
 //#include <linux/semaphore.h>	// contains functions which are related to semaphore
 #include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
+#include <linux/gfp.h>		// contains functions as get_zeroed_page
 
 #include "vchar_driver.h"	// defines registers of device
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.4"
+#define DRIVER_VERSION "2.5"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -80,7 +81,8 @@ typedef struct {	// for task of kernel timer
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
 	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
-	mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
+	// mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
+	mem = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -98,7 +100,8 @@ int vchar_hw_init(vchar_dev_t *hw) {
 /* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
 	// kfree(hw->ctrl_regs);
-	vfree(hw->ctrl_regs);
+	// vfree(hw->ctrl_regs);
+	free_page((unsigned long)hw->ctrl_regs);
 }
 
 /* read from data regs of device */
