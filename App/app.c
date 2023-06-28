@@ -4,6 +4,9 @@
 #include <fcntl.h>		// handles open close
 #include <string.h>
 #include <sys/ioctl.h>		// handles ioctl
+#include <sys/mman.h>		// handles mmap
+
+
 
 #define DEVICE_NODE "/dev/vchar_dev"
 #define BUFFER_SIZE 1024
@@ -13,6 +16,8 @@
 #define GET_STT_CHARDEV 	_IOR(MAGIC_NUM, 1, status_t *)
 #define	SET_RD_ACCESS_CHARDEV	_IOW(MAGIC_NUM, 2, unsigned char *)
 #define SET_WR_ACCESS_CHARDEV 	_IOW(MAGIC_NUM, 3, unsigned char *)
+
+
 
 typedef struct {
 	unsigned char read_count_h;
@@ -24,7 +29,7 @@ typedef struct {
 
 
 
-/* check entry point open of vchar driver */
+/* -------------- check entry point open of vchar driver -------------- */
 int open_chardev() {
 	int fd = open(DEVICE_NODE, O_RDWR); 
 	// fd: file descriptor same as id
@@ -37,13 +42,15 @@ int open_chardev() {
 }
 
 
-/* check entry point release of vchar driver */
+
+/* -------------- check entry point release of vchar driver -------------- */
 void close_chardev(int fd) {
 	close(fd);
 }
 
 
-/* check entry point read of vchar driver */
+
+/* -------------- check entry point read of vchar driver -------------- */
 void read_chardev() {
 	int ret = 0;
 	char user_buf[BUFFER_SIZE];
@@ -59,7 +66,8 @@ void read_chardev() {
 }
 
 
-/* check entry point write of vchar driver */
+
+/* -------------- check entry point write of vchar driver -------------- */
 void write_chardev() {
 	int ret = 0;
 	char user_buf[BUFFER_SIZE];
@@ -78,13 +86,16 @@ void write_chardev() {
 }
 
 
-/* check entry point ioctl of vchar driver */
+
+/* -------------- check entry point ioctl of vchar driver -------------- */
 void clear_data_chardev() {
 	int fd = open_chardev();
 	int ret = ioctl(fd, CLR_DATA_CHARDEV);
 	close_chardev(fd);
 	printf("Clear data in character device %s\n", (ret == 0) ? "successfully" : "unsuccessfully");
 }
+
+
 
 void get_stt_chardev() {
 	status_t stt;
@@ -101,6 +112,8 @@ void get_stt_chardev() {
 	else 
 		printf("Get status from character device unsuccessfully\n");
 }
+
+
 
 void ctrl_read_chardev() {
 	unsigned char isReadEnable, opt;
@@ -135,6 +148,8 @@ void ctrl_read_chardev() {
 
 	close_chardev(fd);
 }
+
+
 
 void ctrl_write_chardev() {
 	unsigned char isWriteEnable, opt;
@@ -172,6 +187,30 @@ void ctrl_write_chardev() {
 
 
 
+/* -------------- check entry point mmap of vchar driver -------------- */
+void mem_map_chardev() {
+	int fd = open_chardev();	
+	size_t mapped_area_size = getpagesize();
+	
+	char *mapped_area = mmap(NULL, mapped_area_size,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if (!mapped_area) {
+		printf("Memory mapping failed !\n");
+		return;
+	}
+
+	close_chardev(fd);
+
+	printf("Enter data into mapped area: ");
+	scanf(" %[^\n]s", mapped_area);
+	printf("Data in mapped area: %s\n", mapped_area);
+
+	munmap((void *)mapped_area, mapped_area_size);
+}
+
+
+
+
+
 int main() {
 	int ret = 0;
 	char option;
@@ -187,6 +226,7 @@ int main() {
 		printf("\ts (to get status of device node)\n");
 		printf("\tR (to enable/disable to read from device node)\n");
 		printf("\tW (to enable/disable to write to device node)\n");
+		printf("\tm (to map kernel buffer into user space)\n");
 		printf("\tq (to quit the application)\n");
 
 		printf("Enter your option: ");
@@ -222,6 +262,9 @@ int main() {
 				break;
 			case 'W':
 				ctrl_write_chardev();
+				break;
+			case 'm':
+				mem_map_chardev();
 				break;
 			case 'q':
 				if (fd > -1)

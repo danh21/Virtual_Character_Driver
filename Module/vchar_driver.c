@@ -19,6 +19,7 @@
 //#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
 //#include <linux/gfp.h>	// contains functions as get_zeroed_page
 #include <linux/ioport.h>	// contains functions which are related to Port IO
+#include <linux/mm.h>		// contains functions which are related to memory mapping
 
 #include "vchar_driver.h"	// defines registers of device
 
@@ -26,7 +27,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.7"
+#define DRIVER_VERSION "2.8"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -94,9 +95,10 @@ typedef struct {	// for task of kernel timer
 /* init device */
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
-	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
+	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	// mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
 	// mem = (char *)get_zeroed_page(GFP_KERNEL);
+	mem = kmalloc((NUM_CTRL_REGS + NUM_STT_REGS) * REG_SIZE, GFP_KERNEL);
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -104,7 +106,8 @@ int vchar_hw_init(vchar_dev_t *hw) {
 
 	hw->ctrl_regs = mem;
 	hw->stt_regs = hw->ctrl_regs + NUM_CTRL_REGS;
-	hw->data_regs = hw->stt_regs + NUM_STT_REGS;
+	// hw->data_regs = hw->stt_regs + NUM_STT_REGS;
+	hw->data_regs = (char *)get_zeroed_page(GFP_KERNEL);
 
 	hw->ctrl_regs[CONTROL_ACCESS_REG] = 0x03;
 	hw->stt_regs[DEVICE_STATUS_REG] = 0x03;
@@ -118,6 +121,7 @@ void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
 	// vfree(hw->ctrl_regs);
 	// free_page((unsigned long)hw->ctrl_regs);
+	free_page((unsigned long)hw->data_regs);
 }
 
 
@@ -324,7 +328,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 
 	// driver will sleep for a period of at least timeout
 	set_current_state(TASK_UNINTERRUPTIBLE);
-	schedule_timeout(3 * HZ); // 3s
+	schedule_timeout(1 * HZ); // 1s
 
 	// READ
 	num_bytes = vchar_hw_read_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
@@ -369,8 +373,8 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		return -EFAULT;
 	}
 
-	//mdelay(10000);	//10s
-	ssleep(3);	//3s
+	//mdelay(1000);	//1s
+	ssleep(1);	//1s
 	
 	// WRITE
 	num_bytes = vchar_hw_write_data(vchar_drv.vchar_hw, *off, len, kernel_buf);
@@ -383,6 +387,39 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
+}
+
+
+
+static int vchar_driver_mmap(struct file *file, struct vm_area_struct *vma) {
+	unsigned long offset, mapped_area_size, phy_addr, pfn, data_mem_size = PAGE_SIZE;
+	
+	// determine location on mapped physical memory
+	offset = vma->vm_pgoff << PAGE_SHIFT;
+	if (offset > data_mem_size) {
+		printk(KERN_ERR "Failed offset on mapped physical memory\n");
+		return -EINVAL;
+	}
+	
+	// size of mapped_area_size
+	mapped_area_size = vma->vm_end - vma->vm_start;
+	if (mapped_area_size > data_mem_size - offset) {
+		printk(KERN_ERR "Failed size of mapped physical memory\n");
+		return -EINVAL;
+	}
+
+	// determine PFN of page frame which contains offset
+	phy_addr = virt_to_phys(vchar_drv.vchar_hw->data_regs + offset);
+	pfn = phy_addr >> PAGE_SHIFT;
+
+	vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);	// not used cache
+
+	if (io_remap_pfn_range(vma, vma->vm_start, pfn, mapped_area_size, vma->vm_page_prot)) {
+		printk(KERN_ERR "Failed mapping\n");		
+		return -EAGAIN;
+	}
+	
+	return 0;	
 }
 
 
@@ -490,6 +527,7 @@ static struct file_operations fops = {
 	.release 	= vchar_driver_release,
 	.read 	 	= vchar_driver_read,
 	.write 	 	= vchar_driver_write,
+	.mmap		= vchar_driver_mmap,
 	.unlocked_ioctl = vchar_driver_ioctl
 };
 
@@ -748,7 +786,7 @@ static int __init vchar_driver_init(void)
 	vchar_drv.vchar_ioport = request_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH, VCHAR_IOPORT_NAME);
 	if (vchar_drv.vchar_ioport)
 		for (i = 0; i < VCHAR_IOPORT_LENGTH; i++)
-			printk("Read data at 0x%02x address: 0x%02x\n", VCHAR_IOPORT(i), inb(VCHAR_IOPORT(i)));
+			printk(KERN_INFO "Read data at 0x%02x address: 0x%02x\n", VCHAR_IOPORT(i), inb(VCHAR_IOPORT(i)));
 
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;

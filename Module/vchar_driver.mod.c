@@ -50,6 +50,13 @@ __attribute__((section("__versions"))) = {
 	{ 0xd11b7a3e, __VMLINUX_SYMBOL_STR(kmem_cache_alloc) },
 	{ 0x34184afe, __VMLINUX_SYMBOL_STR(current_kernel_time) },
 	{ 0x69acdf38, __VMLINUX_SYMBOL_STR(memcpy) },
+	{ 0x4302d0eb, __VMLINUX_SYMBOL_STR(free_pages) },
+	{ 0x9b388444, __VMLINUX_SYMBOL_STR(get_zeroed_page) },
+	{ 0xe84cb310, __VMLINUX_SYMBOL_STR(remap_pfn_range) },
+	{ 0x5944d015, __VMLINUX_SYMBOL_STR(__cachemode2pte_tbl) },
+	{ 0x45449b56, __VMLINUX_SYMBOL_STR(boot_cpu_data) },
+	{ 0x7cd8d75e, __VMLINUX_SYMBOL_STR(page_offset_base) },
+	{ 0x4c9d28b0, __VMLINUX_SYMBOL_STR(phys_base) },
 	{ 0xf0fdf6cb, __VMLINUX_SYMBOL_STR(__stack_chk_fail) },
 	{ 0x9a1fc4b4, __VMLINUX_SYMBOL_STR(jiffies_to_timeval) },
 	{ 0x9c3df9b4, __VMLINUX_SYMBOL_STR(seq_read) },
@@ -71,7 +78,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "B5617478E8A4837ADBE8916");
+MODULE_INFO(srcversion, "CC1DB9FC62228E63D539670");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
