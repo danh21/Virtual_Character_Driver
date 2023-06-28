@@ -5,7 +5,7 @@
 
 # Instruction:
     - To upload kernel module: 
-        + Open Terminal in Module folder
+        + Open Terminal contains file vchar_driver.ko
         + Login with su
         + Enter cmd: insmod vchar_driver.ko
         + Enter cmd: chmod 666 /dev/vchar_dev -> for user to interact with device file
@@ -21,5 +21,5 @@
         + Enter cmd: strace ./testStrace
     - To create race condition:
         + Open terminal in demo_RaceCondition folder
-	    + Enter cmd: ./concurrency.sh
+	+ Enter cmd: ./concurrency.sh
         + Check data in critical resource by entering cmd: ./display_CR

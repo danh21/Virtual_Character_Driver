@@ -18,12 +18,15 @@
 //#include <linux/semaphore.h>	// contains functions which are related to semaphore
 //#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
 //#include <linux/gfp.h>	// contains functions as get_zeroed_page
+#include <linux/ioport.h>	// contains functions which are related to Port IO
 
 #include "vchar_driver.h"	// defines registers of device
 
+
+
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.6"
+#define DRIVER_VERSION "2.7"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -34,9 +37,16 @@
 #define VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 5)
 #define VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 6)
 
+#define IRQ_NUMBER 11
+
 #define OBJ_LOOKASIDE_SIZE (NUM_DATA_REGS * REG_SIZE)
 
-#define IRQ_NUMBER 11
+#define VCHAR_IOPORT_BASE	0x30
+#define VCHAR_IOPORT_LENGTH 	16	// 0x30 -> 0x3F
+#define VCHAR_IOPORT_NAME	"vchar_port"
+#define VCHAR_IOPORT(offset)	(VCHAR_IOPORT_BASE + offset)
+
+
 
 typedef struct {
 	unsigned char read_count_h_reg;
@@ -70,6 +80,7 @@ struct _vchar_drv {
 	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
 	//struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
 	struct kmem_cache *vchar_lookaside_cache;		// lookaside cache 
+	struct resource *vchar_ioport;				// manage port region
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -614,7 +625,8 @@ void init_obj_lookaside(void *obj) {
 
 static int __init vchar_driver_init(void)
 {
-	int ret;	
+	int ret;
+	unsigned char i;	
 
 	/* allocate device number */
 	ret = alloc_chrdev_region(&vchar_drv.dev_num, 0, 1, "vchar_device");
@@ -732,6 +744,12 @@ static int __init vchar_driver_init(void)
 		goto failed_create_lookaside;
 	}
 
+	/* request kernel to use one of port regions */
+	vchar_drv.vchar_ioport = request_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH, VCHAR_IOPORT_NAME);
+	if (vchar_drv.vchar_ioport)
+		for (i = 0; i < VCHAR_IOPORT_LENGTH; i++)
+			printk("Read data at 0x%02x address: 0x%02x\n", VCHAR_IOPORT(i), inb(VCHAR_IOPORT(i)));
+
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
@@ -761,6 +779,13 @@ failed_register_device_number:
 /* ************************************************* exit driver ************************************************* */
 static void __exit vchar_driver_exit(void)
 {
+	/* release IO port region */
+	if (vchar_drv.vchar_ioport)
+		release_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH);
+
+	/* remove lookaside cache */
+	kmem_cache_destroy(vchar_drv.vchar_lookaside_cache);
+
 	/* unregister ISR */
 	//tasklet_kill(&vchar_static_tasklet);
 	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
@@ -774,9 +799,6 @@ static void __exit vchar_driver_exit(void)
 
 	/* remove kernel timer */
 	//del_timer(&vchar_drv.vchar_ktimer);
-
-	/* remove lookaside cache */
-	kmem_cache_destroy(vchar_drv.vchar_lookaside_cache);
 	
 	/* remove file /proc/vchar_proc */
 	remove_proc_entry("vchar_proc", NULL);

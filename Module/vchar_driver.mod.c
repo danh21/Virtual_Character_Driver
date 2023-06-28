@@ -21,9 +21,12 @@ __attribute__((section("__versions"))) = {
 	{ 0x999e8297, __VMLINUX_SYMBOL_STR(vfree) },
 	{ 0xa16aae11, __VMLINUX_SYMBOL_STR(remove_proc_entry) },
 	{ 0xacfa5975, __VMLINUX_SYMBOL_STR(kmem_cache_destroy) },
+	{ 0x7c61340c, __VMLINUX_SYMBOL_STR(__release_region) },
 	{ 0x7485e15e, __VMLINUX_SYMBOL_STR(unregister_chrdev_region) },
 	{ 0x450c190, __VMLINUX_SYMBOL_STR(class_destroy) },
 	{ 0xacbfe419, __VMLINUX_SYMBOL_STR(device_destroy) },
+	{ 0x1fedf0f4, __VMLINUX_SYMBOL_STR(__request_region) },
+	{ 0xff7559e4, __VMLINUX_SYMBOL_STR(ioport_resource) },
 	{ 0x3fa89e8f, __VMLINUX_SYMBOL_STR(cdev_del) },
 	{ 0xaf5517a9, __VMLINUX_SYMBOL_STR(kmem_cache_create) },
 	{ 0x9a025cd5, __VMLINUX_SYMBOL_STR(__mutex_init) },
@@ -68,7 +71,7 @@ __attribute__((section(".modinfo"))) =
 "depends=";
 
 
-MODULE_INFO(srcversion, "508A76AA55135D9D6767E12");
+MODULE_INFO(srcversion, "B5617478E8A4837ADBE8916");
 MODULE_INFO(rhelversion, "7.9");
 #ifdef RETPOLINE
 	MODULE_INFO(retpoline, "Y");
