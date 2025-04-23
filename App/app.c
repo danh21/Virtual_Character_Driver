@@ -73,8 +73,8 @@ void write_chardev() {
 	char user_buf[BUFFER_SIZE];
 
 	printf("Enter data: ");
-	scanf(" %[^\n]s", user_buf);
-
+	scanf(" %[^\n]", user_buf);
+	
 	int fd = open_chardev();
 	ret = write(fd, user_buf, strlen(user_buf) + 1); // + Null
 	close_chardev(fd);
@@ -193,8 +193,9 @@ void mem_map_chardev() {
 	size_t mapped_area_size = getpagesize();
 	
 	char *mapped_area = mmap(NULL, mapped_area_size,  PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if (!mapped_area) {
+	if (mapped_area == MAP_FAILED) {
 		printf("Memory mapping failed !\n");
+		close_chardev(fd);
 		return;
 	}
 

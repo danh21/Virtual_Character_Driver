@@ -20,6 +20,9 @@
 //#include <linux/gfp.h>	// contains functions as get_zeroed_page
 #include <linux/ioport.h>	// contains functions which are related to Port IO
 #include <linux/mm.h>		// contains functions which are related to memory mapping
+#include <linux/io.h>		// virt_to_phys
+#include <linux/seq_file.h>	// seq_file
+
 
 #include "vchar_driver.h"	// defines registers of device
 
@@ -91,8 +94,29 @@ typedef struct {	// for task of kernel timer
 
 
 
-/* *************************************************************************************** Device Specific - START ************************************************************************************** */
+/* *************************************************************************************** Prototype ************************************************************************************** */
 /* init device */
+int vchar_hw_init(vchar_dev_t *hw);
+/* release device */
+void vchar_hw_exit(vchar_dev_t *hw);
+/* read from data regs of device */
+int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf);
+/* write to data regs of device */
+int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf);
+/* clear data regs */
+int vchar_hw_clear_data(vchar_dev_t *hw);
+/* read status regs */
+void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status);
+/* enable or disable read access */
+void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable);
+/* enable or disable write access */
+void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable);
+
+void init_obj_lookaside(void *obj);
+
+
+
+/* *************************************************************************************** Device Specific - START ************************************************************************************** */
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
 	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
@@ -115,8 +139,6 @@ int vchar_hw_init(vchar_dev_t *hw) {
 }
 
 
-
-/* release device */
 void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
 	// vfree(hw->ctrl_regs);
@@ -125,8 +147,6 @@ void vchar_hw_exit(vchar_dev_t *hw) {
 }
 
 
-
-/* read from data regs of device */
 int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
 	int read_bytes = num_regs;
 
@@ -163,8 +183,6 @@ int vchar_hw_read_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf)
 }
 
 
-
-/* write to data regs of device */
 int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf) {
 	int write_bytes = num_regs;
 
@@ -203,8 +221,6 @@ int vchar_hw_write_data(vchar_dev_t *hw, int start_reg, int num_regs, char *kbuf
 }
 
 
-
-/* clear data regs */
 int vchar_hw_clear_data(vchar_dev_t *hw) {
 	if ((hw->ctrl_regs[CONTROL_ACCESS_REG] & CTRL_WRITE_DATA_BIT) == DISABLE) {
 		printk(KERN_WARNING "Not allowed to clear data registers\n");
@@ -216,13 +232,11 @@ int vchar_hw_clear_data(vchar_dev_t *hw) {
 }
 
 
-
-/* read status regs */
 void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status) {
 	memcpy(status, hw->stt_regs, NUM_STT_REGS * REG_SIZE);
 }
 
-/* enable or disable read access */
+
 void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable) {
 	if (isEnable == ENABLE) {
 		hw->ctrl_regs[CONTROL_ACCESS_REG] |= CTRL_READ_DATA_BIT;
@@ -234,7 +248,7 @@ void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable) {
 	}
 }
 
-/* enable or disable write access */
+
 void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 	if (isEnable == ENABLE) {
 		hw->ctrl_regs[CONTROL_ACCESS_REG] |= CTRL_WRITE_DATA_BIT;
@@ -302,9 +316,9 @@ static int vchar_driver_open(struct inode *inode, struct file *flip) {
 
 
 static int vchar_driver_release(struct inode *inode, struct file *flip) {
-	struct timeval using_time;
-	jiffies_to_timeval(jiffies - vchar_drv.start_time, &using_time);
-	printk(KERN_INFO "The driver is used in %ld.%ld seconds\n", using_time.tv_sec, using_time.tv_usec/1000);
+	struct timespec64 using_time;
+	jiffies_to_timespec64(jiffies - vchar_drv.start_time, &using_time);
+	printk(KERN_INFO "The driver is used in %lld.%ld seconds\n", using_time.tv_sec, using_time.tv_nsec/1000000);
 	printk(KERN_INFO "Handle closed event\n");
 	return 0;
 }
@@ -315,12 +329,11 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
 
-	struct timespec read_time = current_kernel_time();
-	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, read_time.tv_sec, read_time.tv_nsec/1000000);	
+	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld\n", len, *off);	
 		
-	// kernel_buf = kmalloc(len, GFP_KERNEL);
+	kernel_buf = kmalloc(len, GFP_KERNEL);
 	// kernel_buf = vmalloc(len);
-	kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
+	//kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -344,7 +357,8 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 		return -EFAULT;
 	}
 
-	kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
+	kfree(kernel_buf);
+	//kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -355,13 +369,11 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
 
-	struct timeval write_time;
-	do_gettimeofday(&write_time);
-	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld at %ld.%ld from Epoch\n", len, *off, write_time.tv_sec, write_time.tv_usec/1000);		
+	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld\n", len, *off);		
 	
-	// kernel_buf = kmalloc(len, GFP_KERNEL);
+	 kernel_buf = kmalloc(len, GFP_KERNEL);
 	// kernel_buf = vmalloc(len);
-	kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
+	//kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -372,6 +384,8 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		printk(KERN_ERR "Failed to copy data from user\n");
 		return -EFAULT;
 	}
+	
+	printk(KERN_INFO "after copy_from_user\n");	
 
 	//mdelay(1000);	//1s
 	ssleep(1);	//1s
@@ -384,7 +398,8 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		return -EFAULT; // bad address
 	}
 	
-	kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
+	kfree(kernel_buf);
+	//kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -613,11 +628,11 @@ static ssize_t vchar_proc_write(struct file *flip, const char __user *user_buf, 
 
 
 
-static struct file_operations proc_fops = {
-	.open	 = vchar_proc_open,
-	.release = vchar_proc_release,
-	.read	 = vchar_proc_read,
-	.write	 = vchar_proc_write	
+static const struct proc_ops proc_fops = {
+	.proc_open	= vchar_proc_open,
+	.proc_release 	= vchar_proc_release,
+	.proc_read	= vchar_proc_read,
+	.proc_write	= vchar_proc_write	
 };
 
 
@@ -676,7 +691,7 @@ static int __init vchar_driver_init(void)
 	}	 
 
 	/* create device class */
-	vchar_drv.dev_class = class_create(THIS_MODULE, "class_vchar_dev");
+	vchar_drv.dev_class = class_create("class_vchar_dev");
 	if (vchar_drv.dev_class == NULL) {
 		printk(KERN_ERR "Failed to create a device class\n");
 		ret = -1;
@@ -870,5 +885,3 @@ module_exit(vchar_driver_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
-MODULE_VERSION(DRIVER_VERSION);
-MODULE_SUPPORTED_DEVICE("testdevice");
