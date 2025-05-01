@@ -17,7 +17,7 @@ int main()
 		return -1;
 	}
 
-	ioctl(fd, DISPLAY_DATA_IN_CRITICAL_RESOURCE);
+	ioctl(fd, DISPLAY_DATA_IN_CRITICAL_RESOURCE);	// loop (change_CR.c) * n processes (concurrency.sh)
 
 	close(fd);
 	return 0;

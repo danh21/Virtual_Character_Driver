@@ -30,7 +30,7 @@
 
 #define DRIVER_AUTHOR "danh21"
 #define DRIVER_DESC "A sample character device driver"
-#define DRIVER_VERSION "2.8"
+#define DRIVER_VERSION "3.0"
 
 #define MAGIC_NUM 21		// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)

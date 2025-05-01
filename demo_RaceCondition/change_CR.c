@@ -10,7 +10,7 @@
 int main()
 {
 	int fd;
-	unsigned int loop = 1 << 20;
+	unsigned int loop = 1 << 20;	//1,048,576
 
 	fd = open(DEVICE_NODE, O_RDWR);
 	if(fd < 0) {
