@@ -1,1 +1,0 @@
-cmd_/home/danh21/Documents/LINUX_DEVICE_DRIVER/Virtual_Character_Driver/Module/built-in.o :=  rm -f /home/danh21/Documents/LINUX_DEVICE_DRIVER/Virtual_Character_Driver/Module/built-in.o; ar rcsD /home/danh21/Documents/LINUX_DEVICE_DRIVER/Virtual_Character_Driver/Module/built-in.o

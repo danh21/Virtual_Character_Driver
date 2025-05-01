@@ -1,1 +1,0 @@
-savedcmd_/home/danh21/Documents/Linux_Device_Driver/Virtual_Character_Driver/Module/Module.symvers :=  scripts/mod/modpost -M -m -a      -o /home/danh21/Documents/Linux_Device_Driver/Virtual_Character_Driver/Module/Module.symvers -T /home/danh21/Documents/Linux_Device_Driver/Virtual_Character_Driver/Module/modules.order -i Module.symvers -e 
