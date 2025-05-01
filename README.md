@@ -51,21 +51,18 @@
 
 ### Usage
 
-- To upload kernel module: 
-	+ Open Terminal in Module/
-        + $ sudo insmod vchar_driver.ko
-        + $ sudo chmod 666 /dev/vchar_dev  #for user to interact with device file
-- To run application:
-        + Open Terminal in App/
-        + $ ./app
+- Open Terminal in main folder.
+- To upload kernel module and add permissions to device file: 
+  - $ sudo insmod Module/vchar_driver.ko
+  - $ sudo chmod 666 /dev/vchar_dev
+- To run sample application:
+  - $ ./App/app
 - To remove kernel module:
-        + Open Terminal in Module/
-        + $ sudo rmmod vchar_driver.ko
-- To test strace:
-        + Open Terminal in Strace/
-        + $ strace ./testStrace
+  - $ sudo rmmod vchar_driver
+- To test **strace** utility for debugging:
+  - $ cd Strace/ ; make ; cd ..
+  - $ strace Strace/testStrace
 - To create race condition:
-        + Open terminal in demo_RaceCondition/
-	+ $ ./concurrency.sh
-        + $ ./display_CR  #Check data in critical resource
+  - $ ./demo_RaceCondition/concurrency.sh
+  - Check data in critical resource: $ ./demo_RaceCondition/display_CR
 

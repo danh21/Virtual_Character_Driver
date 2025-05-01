@@ -6,7 +6,7 @@
 
 #define DEVICE_NODE "/dev/vchar_dev"
 int8_t read_buf[1024];
-int8_t write_buf[1024] = " hello ...";
+int8_t write_buf[1024] = "hello DANH";
 
 int main()
 {
@@ -17,10 +17,10 @@ int main()
 	}
 
 	/* writes bytes from the buffer to the file descriptor at offset */
-	pwrite(fd, write_buf, strlen(write_buf)+1, 6);
+	pwrite(fd, write_buf, strlen(write_buf)+1, 0);
 
 	/* reads bytes from file descriptor at offset (from the start of the file) into the buffer */
-	pread(fd, read_buf, 1024, 0);
+	pread(fd, read_buf, sizeof(read_buf), 0);
 
 	/* Display data */
 	printf("Data = %s\n", read_buf);
