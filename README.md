@@ -46,23 +46,29 @@
 
 - Module/: virtual character driver development
 - App/: sample app
-- demo_RaceCondition/: demo for race condition
-- Strace/: demo for strace feature
+- demo_RaceCondition/: demo for race condition, test sync scheme
+- Strace/: demo for strace feature (utility to debug)
 
 ### Usage
 
-- Open Terminal in main folder.
 - To upload kernel module and add permissions to device file: 
+  - Open terminal at Module/
+  - $ make
   - $ sudo insmod Module/vchar_driver.ko
   - $ sudo chmod 666 /dev/vchar_dev
 - To run sample application:
-  - $ ./App/app
+  - Open terminal at App/
+  - $ make
+  - $ ./app
 - To remove kernel module:
   - $ sudo rmmod vchar_driver
 - To test **strace** utility for debugging:
-  - $ cd Strace/ ; make ; cd ..
-  - $ strace Strace/testStrace
+  - Open terminal at Strace/
+  - $ make
+  - $ strace testStrace
 - To create race condition:
-  - $ ./demo_RaceCondition/concurrency.sh
-  - Check data in critical resource: $ ./demo_RaceCondition/display_CR
+  - Open terminal at demo_RaceCondition/
+  - $ chmod 777 change_CR display_CR
+  - $ . concurrency.sh
+  - Check data in critical resource: $ ./display_CR
 
