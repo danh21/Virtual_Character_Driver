@@ -13,16 +13,19 @@
 //#include <linux/timer.h>	// contains functions which are related to kernel timer
 //#include <linux/interrupt.h>	// contains functions which are related to interrupt
 //#include <linux/workqueue.h>	// contains functions which are related to workqueue
-//#include <linux/spinlock.h>	// contains functions which are related to spinlock
+#if USE_SPINLOCK == ENABLE
+#include <linux/spinlock.h>	// contains functions which are related to spinlock
+#elif USE_MUTEX == ENABLE
 #include <linux/mutex.h>	// contains functions which are related to mutex
-//#include <linux/semaphore.h>	// contains functions which are related to semaphore
+#elif USE_SEMAPHORE == ENABLE
+#include <linux/semaphore.h>	// contains functions which are related to semaphore
+#endif
 //#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
 //#include <linux/gfp.h>	// contains functions as get_zeroed_page
 #include <linux/ioport.h>	// contains functions which are related to Port IO
 #include <linux/mm.h>		// contains functions which are related to memory mapping
 #include <linux/io.h>		// virt_to_phys
 #include <linux/seq_file.h>	// seq_file
-
 
 #include "vchar_driver.h"	// defines registers of device
 
@@ -32,7 +35,9 @@
 #define DRIVER_DESC "A sample character device driver"
 #define DRIVER_VERSION "3.0"
 
-#define MAGIC_NUM 21		// ID of driver
+#define DEVICE_FILE "vchar_dev"
+
+#define MAGIC_NUM 21														// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
 #define VCHAR_GET_STT_REGS 			_IOR(MAGIC_NUM, 1, stt_regs_t *)
 #define VCHAR_SET_RD_DATA_REGS 			_IOW(MAGIC_NUM, 2, unsigned char *)
@@ -46,7 +51,7 @@
 #define OBJ_LOOKASIDE_SIZE (NUM_DATA_REGS * REG_SIZE)
 
 #define VCHAR_IOPORT_BASE	0x30
-#define VCHAR_IOPORT_LENGTH 	16	// 0x30 -> 0x3F
+#define VCHAR_IOPORT_LENGTH 	16											// 0x30 -> 0x3F
 #define VCHAR_IOPORT_NAME	"vchar_port"
 #define VCHAR_IOPORT(offset)	(VCHAR_IOPORT_BASE + offset)
 
@@ -67,24 +72,34 @@ typedef struct {
 } vchar_dev_t;
 
 struct _vchar_drv {
-	dev_t dev_num;						// device number
-	struct class *dev_class;				// class of device
-	struct device *dev;					// device
-	vchar_dev_t *vchar_hw;					// contains registers of device
-	struct cdev *vcdev;					// for device file operations
-	unsigned int open_cnt;					// number of times to open device file
-	unsigned long start_time;				// time which starts opening device file
-	struct timer_list vchar_ktimer;				// kernel timer
-	volatile uint32_t intr_cnt;				// interrupt counter
+	dev_t dev_num;										// device number
+	struct class *dev_class;							// class of device
+	struct device *dev;									// device
+	vchar_dev_t *vchar_hw;								// contains registers of device
+	struct cdev *vcdev;									// for device file operations
+	unsigned int open_cnt;								// number of times to open device file
+	unsigned long start_time;							// time which starts opening device file
+	struct timer_list vchar_ktimer;						// kernel timer
+	volatile uint32_t intr_cnt;							// interrupt counter
 	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
 	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue	
-	unsigned int critical_resource;				// data in critical resource
-	//atomic_t critical_resource;				// data in critical resource
-	//spinlock_t vchar_spinlock;				// spinlock protects critical resource
-	struct mutex vchar_mutexlock;				// mutex lock ptotects critical resource
-	//struct semaphore vchar_semaphore;			// semaphore ptotects critical resource
-	struct kmem_cache *vchar_lookaside_cache;		// lookaside cache 
-	struct resource *vchar_ioport;				// manage port region
+
+	/* handle critical resource */
+#if USE_ATOMIC == ENABLE
+	atomic_t critical_resource;							// data in critical resource
+#else
+	unsigned int critical_resource;						// data in critical resource
+#if USE_SPINLOCK == ENABLE
+	spinlock_t vchar_spinlock;							// spinlock protects critical resource
+#elif USE_MUTEX == ENABLE
+	struct mutex vchar_mutexlock;						// mutex lock ptotects critical resource
+#elif USE_SEMAPHORE == ENABLE
+	struct semaphore vchar_semaphore;					// semaphore ptotects critical resource
+#endif
+#endif
+
+	struct kmem_cache *vchar_lookaside_cache;			// lookaside cache 
+	struct resource *vchar_ioport;						// manage port region
 } vchar_drv; 
 
 typedef struct {	// for task of kernel timer
@@ -94,7 +109,7 @@ typedef struct {	// for task of kernel timer
 
 
 
-/* *************************************************************************************** Prototype ************************************************************************************** */
+#pragma region Prototype
 /* init device */
 int vchar_hw_init(vchar_dev_t *hw);
 /* release device */
@@ -113,10 +128,11 @@ void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable);
 void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable);
 
 void init_obj_lookaside(void *obj);
+#pragma endregion
 
 
 
-/* *************************************************************************************** Device Specific - START ************************************************************************************** */
+#pragma region Device Specific
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
 	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
@@ -300,12 +316,11 @@ irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	return IRQ_HANDLED;
 }
 */
-/* **************************************************************************************** Device specific - END ************************************************************************************** */
+#pragma endregion
 
 
 
-/* ***************************************************************************************** OS specific - START **************************************************************************************** */
-/* ***************************** entry points functions for device file ***************************** */
+#pragma region entry points functions for device file
 static int vchar_driver_open(struct inode *inode, struct file *flip) {
 	vchar_drv.start_time = jiffies;
 	vchar_drv.open_cnt++;
@@ -452,6 +467,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			else
 				printk(KERN_WARNING "Can not clear data registers\n");
 			break;
+
 		case VCHAR_GET_STT_REGS:		
 			vchar_hw_get_status(vchar_drv.vchar_hw, &status);
 			if (copy_to_user((stt_regs_t *)arg, &status, sizeof(status))) {
@@ -460,6 +476,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			}
 			printk(KERN_INFO "Got information from status registers\n");
 			break;
+
 		case VCHAR_SET_RD_DATA_REGS:		
 			if (copy_from_user(&isReadEnable, (unsigned char*)arg, sizeof(isReadEnable))) {
 				printk(KERN_ERR "Failed to get read access from user\n");
@@ -468,6 +485,7 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			vchar_hw_enable_read(vchar_drv.vchar_hw, isReadEnable);
 			printk(KERN_INFO "Set %s to read\n", (isReadEnable == 1) ? "enable" : "disable");
 			break;
+
 		case VCHAR_SET_WR_DATA_REGS:		
 			if (copy_from_user(&isWriteEnable, (unsigned char*)arg, sizeof(isWriteEnable))) {
 				printk(KERN_ERR "Failed to get write access from user\n");
@@ -476,59 +494,49 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 			vchar_hw_enable_write(vchar_drv.vchar_hw, isWriteEnable);
 			printk(KERN_INFO "Set %s to write\n", (isWriteEnable == 1) ? "enable" : "disable");
 			break;
+
 		case VCHAR_CHANGE_DATA_IN_CRITICAL_RESOURCE:
-			// --------------------------- atomic method			
-			// atomic_inc(&vchar_drv.critical_resource);
-			
-			// --------------------------- spinlock method
-			/*
+#if USE_ATOMIC == ENABLE
+	atomic_inc(&vchar_drv.critical_resource);
+#elif USE_SPINLOCK == ENABLE
 			spin_lock(&vchar_drv.vchar_spinlock);
 			vchar_drv.critical_resource++;
 			spin_unlock(&vchar_drv.vchar_spinlock);
-			*/
-	
-			// --------------------------- mutex method
-						
+#elif USE_MUTEX == ENABLE
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource++;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
-			
-
-			// --------------------------- semaphore method			
-			/*			
+#elif USE_SEMAPHORE == ENABLE
 			down(&vchar_drv.vchar_semaphore);
 			vchar_drv.critical_resource++;
 			up(&vchar_drv.vchar_semaphore);
-			*/
+#endif
 			break;
-		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:			
-			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
-			// printk(KERN_INFO "Data in critical resource: %d\n", atomic_read(&vchar_drv.critical_resource));
-			break;
-		case VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE:
-			// --------------------------- atomic method
-			// atomic_set(&vchar_drv.critical_resource, 0);
 
-			// --------------------------- spinlock method
-			/*			
+		case VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE:	
+#if USE_ATOMIC == ENABLE
+			printk(KERN_INFO "Data in critical resource: %d\n", atomic_read(&vchar_drv.critical_resource));
+#else		
+			printk(KERN_INFO "Data in critical resource: %d\n", vchar_drv.critical_resource);
+#endif
+			break;
+
+		case VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE:
+#if USE_ATOMIC == ENABLE
+			atomic_set(&vchar_drv.critical_resource, 0);
+#elif USE_SPINLOCK == ENABLE
 			spin_lock(&vchar_drv.vchar_spinlock);
 			vchar_drv.critical_resource = 0;
 			spin_unlock(&vchar_drv.vchar_spinlock);
-			*/
-
-			// --------------------------- mutex method
-			
+#elif USE_MUTEX == ENABLE
 			mutex_lock(&vchar_drv.vchar_mutexlock);
 			vchar_drv.critical_resource = 0;
 			mutex_unlock(&vchar_drv.vchar_mutexlock);
-				
-
-			// --------------------------- semaphore method			
-			/*			
+#elif USE_SEMAPHORE == ENABLE
 			down(&vchar_drv.vchar_semaphore);
 			vchar_drv.critical_resource = 0;
-			up(&vchar_drv.vchar_semaphore);		
-			*/			
+			up(&vchar_drv.vchar_semaphore);	
+#endif		
 			break;
 	}
 	return ret;
@@ -537,18 +545,19 @@ static long vchar_driver_ioctl(struct file *flip, unsigned int cmd, unsigned lon
 
 
 static struct file_operations fops = {
-	.owner	 	= THIS_MODULE,
-	.open 	 	= vchar_driver_open,
-	.release 	= vchar_driver_release,
-	.read 	 	= vchar_driver_read,
-	.write 	 	= vchar_driver_write,
-	.mmap		= vchar_driver_mmap,
+	.owner	 		= THIS_MODULE,
+	.open 	 		= vchar_driver_open,
+	.release 		= vchar_driver_release,
+	.read 	 		= vchar_driver_read,
+	.write 	 		= vchar_driver_write,
+	.mmap			= vchar_driver_mmap,
 	.unlocked_ioctl = vchar_driver_ioctl
 };
+#pragma endregion
 
 
 
-/* ***************************** entry points functions for file in procfs ***************************** */
+#pragma	region entry points functions for file in procfs
 static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
 	msg = kmalloc(256, GFP_KERNEL);
@@ -634,10 +643,11 @@ static const struct proc_ops proc_fops = {
 	.proc_read	= vchar_proc_read,
 	.proc_write	= vchar_proc_write	
 };
+#pragma endregion
 
 
 
-/* *************************************** handle, config kernel timer and send interrupt signal *************************************** */
+#pragma region handle, config kernel timer and send interrupt signal
 /*
 static void handle_timer(unsigned long data) {
 	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
@@ -665,10 +675,11 @@ static void config_timer(struct timer_list* ktimer) {
 	ktimer->data = (unsigned long)&data;
 }
 */
+#pragma endregion
 
 
 
-/* *********************************************************** init driver *********************************************************** */
+#pragma region init driver
 void init_obj_lookaside(void *obj) {
 	//char *p = (char *)obj;
 	memset(obj, 0, OBJ_LOOKASIDE_SIZE);
@@ -699,7 +710,7 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* create device file */
-	vchar_drv.dev = device_create(vchar_drv.dev_class, NULL, vchar_drv.dev_num, NULL, "vchar_dev");
+	vchar_drv.dev = device_create(vchar_drv.dev_class, NULL, vchar_drv.dev_num, NULL, DEVICE_FILE);
 	if (IS_ERR(vchar_drv.dev)) {
 		printk(KERN_ERR "Failed to create a device\n");
 		ret = -1;
@@ -752,7 +763,7 @@ static int __init vchar_driver_init(void)
 
 	/* register ISR */
 	/*
-	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, "vchar_dev", (void*)&vchar_drv.vcdev);
+	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, DEVICE_FILE, (void*)&vchar_drv.vcdev);
 	if (ret) {
 		printk(KERN_ERR "Failed to register ISR\n");
 		goto failed_create_proc;
@@ -780,14 +791,14 @@ static int __init vchar_driver_init(void)
 	}
 	*/
 
-	/* init spinlock */
-	// spin_lock_init(&vchar_drv.vchar_spinlock);
-
-	/* init mutex lock */
+	/* init sync mechanism */
+#if USE_SPINLOCK == ENABLE
+	spin_lock_init(&vchar_drv.vchar_spinlock);
+#elif USE_MUTEX == ENABLE
 	mutex_init(&vchar_drv.vchar_mutexlock);	
-	
-	/* init semaphore */
-	// sema_init(&vchar_drv.vchar_semaphore, 1);	
+#elif USE_SEMAPHORE == ENABLE
+	sema_init(&vchar_drv.vchar_semaphore, 1);
+#endif		
 
 	/* init lookaside cache */
 	vchar_drv.vchar_lookaside_cache = kmem_cache_create("vchar_lookaside_cache", OBJ_LOOKASIDE_SIZE, 0, SLAB_PANIC, init_obj_lookaside);
@@ -826,10 +837,11 @@ failed_create_class:
 failed_register_device_number:
 	return ret;	
 }
+#pragma endregion
 
 
 
-/* ************************************************* exit driver ************************************************* */
+#pragma region exit driver
 static void __exit vchar_driver_exit(void)
 {
 	/* release IO port region */
@@ -875,7 +887,7 @@ static void __exit vchar_driver_exit(void)
 
 	printk(KERN_INFO "Exit virtual character driver\n");
 }
-/* ****************************************************************************************** OS specific - END ***************************************************************************************** */
+#pragma endregion
 
 
 

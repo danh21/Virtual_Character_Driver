@@ -3,6 +3,20 @@
 #define NUM_STT_REGS 	5						//number of status registers
 #define NUM_DATA_REGS 	256 						//number of data registers
 #define NUM_DEV_REGS 	(NUM_CTRL_REGS + NUM_STT_REGS + NUM_DATA_REGS)	//number of registers
+#define ENABLE 1
+#define DISABLE 0
+
+
+
+/****************** Define custom config: START ******************/
+/* Select one mechanism of below options to protect critical resource */
+#define USE_ATOMIC      DISABLE
+#define USE_MUTEX       ENABLE
+#define USE_SPINLOCK    DISABLE
+#define USE_SEMAPHORE   DISABLE
+
+
+/****************** Define custom config: END ******************/
 
 
 
@@ -24,9 +38,6 @@
 
 #define CTRL_READ_DATA_BIT (1 << 0)
 #define CTRL_WRITE_DATA_BIT (1 << 1)
-
-#define ENABLE 1
-#define DISABLE 0
 /****************** Define control register: END ******************/
 
 
