@@ -68,7 +68,8 @@
   - $ strace testStrace
 - To create race condition:
   - Open terminal at demo_RaceCondition/
-  - $ chmod 777 change_CR display_CR
-  - $ . concurrency.sh
-  - Check data in critical resource: $ ./display_CR
-
+  - $ make
+  - To increase critical resource data by 3 cores at same time: $ . concurrency.sh
+  - To increase critical resource data by 1 core: $ ./change_CR
+  - To check critical resource data: $ ./display_CR
+  - To reset critical resource data to 0: $ ./reset_CR
