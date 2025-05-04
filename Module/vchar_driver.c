@@ -27,14 +27,11 @@
 #include <linux/semaphore.h>	// contains functions which are related to semaphore
 #endif
 
-//#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
-//#include <linux/gfp.h>		// contains functions as get_zeroed_page
+#include <linux/vmalloc.h>		// contains functions as vmalloc and vfree
 #include <linux/ioport.h>		// contains functions which are related to Port IO
 #include <linux/mm.h>			// contains functions which are related to memory mapping
 #include <linux/io.h>			// virt_to_phys
 #include <linux/seq_file.h>		// seq_file
-
-
 
 
 
@@ -64,6 +61,7 @@
 
 
 
+#pragma region DATA STRUCT
 typedef struct {
 	unsigned char read_count_h_reg;
 	unsigned char read_count_l_reg;
@@ -117,9 +115,9 @@ struct _vchar_drv {
 #endif
 #endif
 
-	struct kmem_cache *vchar_lookaside_cache;			// lookaside cache 
 	struct resource *vchar_ioport;						// manage port region
 } vchar_drv; 
+#pragma endregion
 
 
 
@@ -149,12 +147,7 @@ void init_obj_lookaside(void *obj);
 #pragma region Device Specific
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
-
-	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
-	// mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
-	// mem = (char *)get_zeroed_page(GFP_KERNEL);
-	mem = kmalloc((NUM_CTRL_REGS + NUM_STT_REGS) * REG_SIZE, GFP_KERNEL);
-
+	mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -162,22 +155,16 @@ int vchar_hw_init(vchar_dev_t *hw) {
 
 	hw->ctrl_regs = mem;
 	hw->stt_regs = hw->ctrl_regs + NUM_CTRL_REGS;
-
-	// hw->data_regs = hw->stt_regs + NUM_STT_REGS;
-	hw->data_regs = (char *)get_zeroed_page(GFP_KERNEL);
-
+	hw->data_regs = hw->stt_regs + NUM_STT_REGS;
 	hw->ctrl_regs[CONTROL_ACCESS_REG] = 0x03;
 	hw->stt_regs[DEVICE_STATUS_REG] = 0x03;
+
 	return 0;
 }
 
 
 void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
-	// vfree(hw->ctrl_regs);
-
-	// free_page((unsigned long)hw->ctrl_regs);
-	free_page((unsigned long)hw->data_regs);
 }
 
 
@@ -347,7 +334,6 @@ static int vchar_driver_open(struct inode *inode, struct file *flip) {
 }
 
 
-
 static int vchar_driver_release(struct inode *inode, struct file *flip) {
 	struct timespec64 using_time;
 	jiffies_to_timespec64(jiffies - vchar_drv.start_time, &using_time);
@@ -357,16 +343,13 @@ static int vchar_driver_release(struct inode *inode, struct file *flip) {
 }
 
 
-
 static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_t len, loff_t *off) {
 	ssize_t num_bytes = 0;
 	char *kernel_buf;
 
 	printk(KERN_INFO "Handle read %zu bytes event which starts from %lld\n", len, *off);	
 		
-	kernel_buf = kmalloc(len, GFP_KERNEL);
-	// kernel_buf = vmalloc(len);
-	//kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
+	kernel_buf = vmalloc(len);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -390,8 +373,7 @@ static ssize_t vchar_driver_read(struct file *flip, char __user *user_buf, size_
 		return -EFAULT;
 	}
 
-	kfree(kernel_buf);
-	//kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
+	vfree(kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -404,9 +386,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 
 	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld\n", len, *off);		
 	
-	kernel_buf = kmalloc(len, GFP_KERNEL);
-	// kernel_buf = vmalloc(len);
-	//kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
+	kernel_buf = vmalloc(len);
 	if (kernel_buf == NULL) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM;
@@ -431,9 +411,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 		return -EFAULT; // bad address
 	}
 	
-	kfree(kernel_buf);
-	//kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
-
+	vfree(kernel_buf);
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -580,7 +558,6 @@ static struct file_operations fops = {
 static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
 	msg = kmalloc(256, GFP_KERNEL);
-	// msg = vmalloc(256);	
 
 	if (!msg) {
 		pr_err("seq_start: failed to allocate memory");
@@ -613,7 +590,6 @@ static void* vchar_seq_next(struct seq_file *s, void *pData, loff_t *pos) {
 static void vchar_seq_stop(struct seq_file *s, void *pData) {
 	printk(KERN_INFO "seq_stop\n");
 	kfree(pData);
-	// vfree(pData);
 }
 
 
@@ -686,13 +662,6 @@ static void handle_timer(struct timer_list* ktimer) {
 
 
 #pragma region init driver
-void init_obj_lookaside(void *obj) {
-	//char *p = (char *)obj;
-	memset(obj, 0, OBJ_LOOKASIDE_SIZE);
-}
-
-
-
 static int __init vchar_driver_init(void)
 {
 	int ret;
@@ -725,7 +694,6 @@ static int __init vchar_driver_init(void)
 
 	/* allocate memory for struct of driver and init */
 	vchar_drv.vchar_hw = kmalloc(sizeof(vchar_dev_t), GFP_KERNEL);
-	// vchar_drv.vchar_hw = vmalloc(sizeof(vchar_dev_t));
 	if (!vchar_drv.vchar_hw) {
 		printk(KERN_ERR "Failed to allocate memory for struct of driver\n");
 		ret = -ENOMEM;		
@@ -805,14 +773,6 @@ static int __init vchar_driver_init(void)
 	sema_init(&vchar_drv.vchar_semaphore, 1);
 #endif		
 
-	/* init lookaside cache */
-	vchar_drv.vchar_lookaside_cache = kmem_cache_create("vchar_lookaside_cache", OBJ_LOOKASIDE_SIZE, 0, SLAB_PANIC, init_obj_lookaside);
-	if (!vchar_drv.vchar_lookaside_cache) {
-		printk(KERN_ERR "Failed to allocate memory for lookaside cache\n");
-		ret = -ENOMEM;		
-		goto failed_create_lookaside;
-	}
-
 	/* request kernel to use one of port regions */
 	vchar_drv.vchar_ioport = request_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH, VCHAR_IOPORT_NAME);
 	if (vchar_drv.vchar_ioport)
@@ -824,15 +784,13 @@ static int __init vchar_driver_init(void)
 
 //failed_create_workqueue:
 //failed_create_tasklet:
-	//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
-failed_create_lookaside:
+//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
 	cdev_del(vchar_drv.vcdev);
 failed_create_proc:
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
 	kfree(vchar_drv.vchar_hw);
-	// vfree(vchar_drv.vchar_hw);
 failed_alloc_struct:
 	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);
 failed_create_device:
@@ -852,9 +810,6 @@ static void __exit vchar_driver_exit(void)
 	/* release IO port region */
 	if (vchar_drv.vchar_ioport)
 		release_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH);
-
-	/* remove lookaside cache */
-	kmem_cache_destroy(vchar_drv.vchar_lookaside_cache);
 
 	/* unregister ISR */
 	//tasklet_kill(&vchar_static_tasklet);
@@ -882,8 +837,7 @@ static void __exit vchar_driver_exit(void)
 	vchar_hw_exit(vchar_drv.vchar_hw);
 
 	/* release memory of struct of the driver */
-	// kfree(vchar_drv.vchar_hw);
-	vfree(vchar_drv.vchar_hw);
+	kfree(vchar_drv.vchar_hw);
 
 	/* delete device file */
 	device_destroy(vchar_drv.dev_class, vchar_drv.dev_num);

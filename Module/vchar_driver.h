@@ -1,7 +1,7 @@
-#define REG_SIZE 	1						//size of 1 register is 1 byte
-#define NUM_CTRL_REGS 	1 						//number of control registers
-#define NUM_STT_REGS 	5						//number of status registers
-#define NUM_DATA_REGS 	256 						//number of data registers
+#define REG_SIZE 	1						                            //size of 1 register is 1 byte
+#define NUM_CTRL_REGS 	1 						                        //number of control registers
+#define NUM_STT_REGS 	5						                        //number of status registers
+#define NUM_DATA_REGS 	256 						                    //number of data registers
 #define NUM_DEV_REGS 	(NUM_CTRL_REGS + NUM_STT_REGS + NUM_DATA_REGS)	//number of registers
 #define ENABLE 1
 #define DISABLE 0
