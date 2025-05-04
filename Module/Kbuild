@@ -1,5 +1,6 @@
-EXTRA_CFLAGS = -Wall	
+EXTRA_CFLAGS = -Wall -Wno-unknown-pragmas	
 # -Wall flag allows compiler display all warning during compiling
+# -Wno-unknown-pragmas ignores pragma warning
 
 obj-m = vchar_driver.o
 # obj-m: object file will be compiled as kernel module
