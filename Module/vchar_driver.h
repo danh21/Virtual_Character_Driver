@@ -15,6 +15,10 @@
 #define USE_SPINLOCK    DISABLE
 #define USE_SEMAPHORE   DISABLE
 
+/* Use timer to trigger event */
+#define USE_TIMER       DISABLE
+
+
 
 /****************** Define custom config: END ******************/
 

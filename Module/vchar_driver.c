@@ -1,33 +1,40 @@
-#include <linux/module.h>	// defines maroes as module_init and module_exit
-#include <linux/fs.h>		// defines functions as allocate/release device number	
-#include <linux/device.h>	// contains functions which handle device file
-#include <linux/slab.h>		// contains functions which are related to kernel memory allocation
-#include <linux/cdev.h>		// contains functions which work with cdev
-#include <linux/uaccess.h>	// contains functions as copy_to_user, copy_from_user
-#include <linux/ioctl.h>	// defines macroes as _IO, _IOWR,...
-#include <linux/proc_fs.h>	// contains functions which create/remove file in procfs
+#include "vchar_driver.h"		// defines registers of device
+
+#include <linux/module.h>		// defines maroes as module_init and module_exit
+#include <linux/fs.h>			// defines functions as allocate/release device number	
+#include <linux/device.h>		// contains functions which handle device file
+#include <linux/slab.h>			// contains functions which are related to kernel memory allocation
+#include <linux/cdev.h>			// contains functions which work with cdev
+#include <linux/uaccess.h>		// contains functions as copy_to_user, copy_from_user
+#include <linux/ioctl.h>		// defines macroes as _IO, _IOWR,...
+#include <linux/proc_fs.h>		// contains functions which create/remove file in procfs
 #include <linux/timekeeping.h>	// contains functions to get wall time
-#include <linux/jiffies.h>	// contains functions to get system uptime
-#include <linux/sched.h>	// contains functions which are related to scheduling
-#include <linux/delay.h>	// contains functions which are related to delay and sleep
-//#include <linux/timer.h>	// contains functions which are related to kernel timer
+#include <linux/jiffies.h>		// contains functions to get system uptime
+#include <linux/sched.h>		// contains functions which are related to scheduling
+#include <linux/delay.h>		// contains functions which are related to delay and sleep
+
+#if USE_TIMER == ENABLE
+#include <linux/timer.h>		// contains functions which are related to kernel timer
+#endif
 //#include <linux/interrupt.h>	// contains functions which are related to interrupt
 //#include <linux/workqueue.h>	// contains functions which are related to workqueue
+
 #if USE_SPINLOCK == ENABLE
-#include <linux/spinlock.h>	// contains functions which are related to spinlock
+#include <linux/spinlock.h>		// contains functions which are related to spinlock
 #elif USE_MUTEX == ENABLE
-#include <linux/mutex.h>	// contains functions which are related to mutex
+#include <linux/mutex.h>		// contains functions which are related to mutex
 #elif USE_SEMAPHORE == ENABLE
 #include <linux/semaphore.h>	// contains functions which are related to semaphore
 #endif
-//#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
-//#include <linux/gfp.h>	// contains functions as get_zeroed_page
-#include <linux/ioport.h>	// contains functions which are related to Port IO
-#include <linux/mm.h>		// contains functions which are related to memory mapping
-#include <linux/io.h>		// virt_to_phys
-#include <linux/seq_file.h>	// seq_file
 
-#include "vchar_driver.h"	// defines registers of device
+//#include <linux/vmalloc.h>	// contains functions as vmalloc and vfree
+//#include <linux/gfp.h>		// contains functions as get_zeroed_page
+#include <linux/ioport.h>		// contains functions which are related to Port IO
+#include <linux/mm.h>			// contains functions which are related to memory mapping
+#include <linux/io.h>			// virt_to_phys
+#include <linux/seq_file.h>		// seq_file
+
+
 
 
 
@@ -71,6 +78,14 @@ typedef struct {
 	unsigned char *data_regs;
 } vchar_dev_t;
 
+#if USE_TIMER == ENABLE
+typedef struct {	// for task of kernel timer
+	struct timer_list timer;
+	int param1;
+	int param2;
+} vchar_ktimer_data_t;
+#endif
+
 struct _vchar_drv {
 	dev_t dev_num;										// device number
 	struct class *dev_class;							// class of device
@@ -79,7 +94,11 @@ struct _vchar_drv {
 	struct cdev *vcdev;									// for device file operations
 	unsigned int open_cnt;								// number of times to open device file
 	unsigned long start_time;							// time which starts opening device file
-	struct timer_list vchar_ktimer;						// kernel timer
+
+#if USE_TIMER == ENABLE
+	vchar_ktimer_data_t vchar_ktimer;
+#endif
+
 	volatile uint32_t intr_cnt;							// interrupt counter
 	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
 	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue	
@@ -101,11 +120,6 @@ struct _vchar_drv {
 	struct kmem_cache *vchar_lookaside_cache;			// lookaside cache 
 	struct resource *vchar_ioport;						// manage port region
 } vchar_drv; 
-
-typedef struct {	// for task of kernel timer
-	int param1;
-	int param2;
-} vchar_ktimer_data_t;
 
 
 
@@ -135,10 +149,12 @@ void init_obj_lookaside(void *obj);
 #pragma region Device Specific
 int vchar_hw_init(vchar_dev_t *hw) {
 	char *mem;
+
 	// mem = kmalloc(NUM_DEV_REGS * REG_SIZE, GFP_KERNEL);
 	// mem = vmalloc(NUM_DEV_REGS * REG_SIZE);
 	// mem = (char *)get_zeroed_page(GFP_KERNEL);
 	mem = kmalloc((NUM_CTRL_REGS + NUM_STT_REGS) * REG_SIZE, GFP_KERNEL);
+
 	if (!mem) {
 		printk(KERN_ERR "Failed to allocate memory\n");
 		return -ENOMEM; // out of memory
@@ -146,6 +162,7 @@ int vchar_hw_init(vchar_dev_t *hw) {
 
 	hw->ctrl_regs = mem;
 	hw->stt_regs = hw->ctrl_regs + NUM_CTRL_REGS;
+
 	// hw->data_regs = hw->stt_regs + NUM_STT_REGS;
 	hw->data_regs = (char *)get_zeroed_page(GFP_KERNEL);
 
@@ -158,6 +175,7 @@ int vchar_hw_init(vchar_dev_t *hw) {
 void vchar_hw_exit(vchar_dev_t *hw) {
 	kfree(hw->ctrl_regs);
 	// vfree(hw->ctrl_regs);
+
 	// free_page((unsigned long)hw->ctrl_regs);
 	free_page((unsigned long)hw->data_regs);
 }
@@ -386,7 +404,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 
 	printk(KERN_INFO "Handle write %zu bytes event which starts from %lld\n", len, *off);		
 	
-	 kernel_buf = kmalloc(len, GFP_KERNEL);
+	kernel_buf = kmalloc(len, GFP_KERNEL);
 	// kernel_buf = vmalloc(len);
 	//kernel_buf = kmem_cache_alloc(vchar_drv.vchar_lookaside_cache, GFP_KERNEL);
 	if (kernel_buf == NULL) {
@@ -415,6 +433,7 @@ static ssize_t vchar_driver_write(struct file *flip, const char __user *user_buf
 	
 	kfree(kernel_buf);
 	//kmem_cache_free(vchar_drv.vchar_lookaside_cache, kernel_buf);
+
 	*off += num_bytes;
 	return num_bytes;
 }
@@ -562,6 +581,7 @@ static void* vchar_seq_start(struct seq_file *s, loff_t *pos) {
 	char *msg;
 	msg = kmalloc(256, GFP_KERNEL);
 	// msg = vmalloc(256);	
+
 	if (!msg) {
 		pr_err("seq_start: failed to allocate memory");
 		return NULL;
@@ -648,33 +668,19 @@ static const struct proc_ops proc_fops = {
 
 
 #pragma region handle, config kernel timer and send interrupt signal
-/*
-static void handle_timer(unsigned long data) {
-	vchar_ktimer_data_t* pData = (vchar_ktimer_data_t*)data;
-	if (!pData) {
-		printk(KERN_ERR "Can not handle a NULL pointer\n");
-		return;
-	}
+#if USE_TIMER == ENABLE
+static void handle_timer(struct timer_list* ktimer) {
+	vchar_ktimer_data_t *pData = from_timer(pData, ktimer, timer);
+	++pData->param1;
+	--pData->param2;
+	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
 
-	//++pData->param1;
-	//--pData->param2;
-	//printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
+	// asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
+	// printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
 
-	asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
-	printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
-
-	mod_timer(&vchar_drv.vchar_ktimer, jiffies + 10*HZ); // change kernel timer to continue to task again
+	mod_timer(&vchar_drv.vchar_ktimer.timer, jiffies + msecs_to_jiffies(2000)); // callback after 2 seconds
 }
-
-
-
-static void config_timer(struct timer_list* ktimer) {
-	static vchar_ktimer_data_t data;
-	ktimer->expires = jiffies + 10 * HZ;
-	ktimer->function = handle_timer;
-	ktimer->data = (unsigned long)&data;
-}
-*/
+#endif
 #pragma endregion
 
 
@@ -755,11 +761,10 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* Init, config, register kernel timer */
-	/*
-	init_timer(&vchar_drv.vchar_ktimer);
-	config_timer(&vchar_drv.vchar_ktimer);
-	add_timer(&vchar_drv.vchar_ktimer);
-	*/
+#if USE_TIMER == ENABLE
+	timer_setup(&vchar_drv.vchar_ktimer.timer, handle_timer, 0);
+	mod_timer(&vchar_drv.vchar_ktimer.timer, jiffies + msecs_to_jiffies(2000));
+#endif
 
 	/* register ISR */
 	/*
@@ -863,7 +868,9 @@ static void __exit vchar_driver_exit(void)
 	*/
 
 	/* remove kernel timer */
-	//del_timer(&vchar_drv.vchar_ktimer);
+#if USE_TIMER == ENABLE
+	del_timer(&vchar_drv.vchar_ktimer.timer);
+#endif
 	
 	/* remove file /proc/vchar_proc */
 	remove_proc_entry("vchar_proc", NULL);
