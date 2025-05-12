@@ -45,6 +45,9 @@
 ### Source
 
 - Module/: virtual character driver development
+  - vchar_driver.c: implement driver
+  - vchar_driver.h: config
+  - Kbuild, Makefile: build
 - App/: sample app
 - demo_RaceCondition/: demo for race condition, test sync scheme
 - Strace/: demo for strace feature (utility to debug)
@@ -62,10 +65,8 @@
   - $ ./app
 - To remove kernel module:
   - $ sudo rmmod vchar_driver
-- To test **strace** utility for debugging:
-  - Open terminal at Strace/
-  - $ make
-  - $ strace testStrace
+- To test operation of timer, config enable USE_TIMER
+- To test operation of interrupt, config enable USE_TIMER and USE_INTERRUPT for top-half task; can config bottom-half task using tasklet / workqueue
 - To create race condition:
   - Open terminal at demo_RaceCondition/
   - $ make
@@ -73,3 +74,8 @@
   - To increase critical resource data by 1 core: $ ./change_CR
   - To check critical resource data: $ ./display_CR
   - To reset critical resource data to 0: $ ./reset_CR
+  - To change other mechanisms, config enable one of ATOMIC, MUTEX, SPINLOCK, SEMAPHORE
+- To test **strace** utility for debugging:
+  - Open terminal at Strace/
+  - $ make
+  - $ strace testStrace

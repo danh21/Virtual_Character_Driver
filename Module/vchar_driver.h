@@ -15,11 +15,21 @@
 #define USE_SPINLOCK    DISABLE
 #define USE_SEMAPHORE   DISABLE
 
-/* Use timer to trigger event */
-#define USE_TIMER       DISABLE
+/* Use timer to loop 1 event */
+#define USE_TIMER       ENABLE
 
+/* Use interrupt to trigger 1 top-half task */
+#if USE_TIMER == ENABLE
+#define USE_INTERRUPT   ENABLE
+#endif
 
-
+/* Use one of below options to trigger 1 bottom-half task */
+#if USE_INTERRUPT == ENABLE
+#define USE_STATIC_TASKLET      ENABLE
+#define USE_DYNAMIC_TASKLET     DISABLE
+#define USE_STATIC_WORKQUEUE    DISABLE
+#define USE_CUSTOM_WORKQUEUE    DISABLE
+#endif
 /****************** Define custom config: END ******************/
 
 

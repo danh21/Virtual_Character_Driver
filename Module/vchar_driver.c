@@ -16,8 +16,14 @@
 #if USE_TIMER == ENABLE
 #include <linux/timer.h>		// contains functions which are related to kernel timer
 #endif
-//#include <linux/interrupt.h>	// contains functions which are related to interrupt
-//#include <linux/workqueue.h>	// contains functions which are related to workqueue
+
+#if USE_INTERRUPT == ENABLE
+#include <linux/interrupt.h>	// contains functions which are related to interrupt
+#endif
+
+#if USE_STATIC_WORKQUEUE == ENABLE
+#include <linux/workqueue.h>	// contains functions which are related to workqueue
+#endif
 
 #if USE_SPINLOCK == ENABLE
 #include <linux/spinlock.h>		// contains functions which are related to spinlock
@@ -50,7 +56,7 @@
 #define VCHAR_DISPLAY_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 5)
 #define VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 6)
 
-#define IRQ_NUMBER 11
+#define IRQ_NUMBER 2
 
 #define OBJ_LOOKASIDE_SIZE (NUM_DATA_REGS * REG_SIZE)
 
@@ -97,9 +103,16 @@ struct _vchar_drv {
 	vchar_ktimer_data_t vchar_ktimer;
 #endif
 
+#if USE_INTERRUPT == ENABLE
 	volatile uint32_t intr_cnt;							// interrupt counter
+#if USE_STATIC_TASKLET == ENABLE
+	struct tasklet_struct vchar_static_tasklet;			// static tasklet
+#elif USE_DYNAMIC_TASKLET == ENABLE
 	struct tasklet_struct* vchar_dynamic_tasklet;		// dynamic tasklet
+#elif USE_CUSTOM_WORKQUEUE == ENABLE
 	struct workqueue_struct* vchar_user_workqueue;		// user-defined workqueue	
+#endif
+#endif
 
 	/* handle critical resource */
 #if USE_ATOMIC == ENABLE
@@ -138,8 +151,6 @@ void vchar_hw_get_status(vchar_dev_t *hw, stt_regs_t *status);
 void vchar_hw_enable_read(vchar_dev_t *hw, unsigned char isEnable);
 /* enable or disable write access */
 void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable);
-
-void init_obj_lookaside(void *obj);
 #pragma endregion
 
 
@@ -284,43 +295,46 @@ void vchar_hw_enable_write(vchar_dev_t *hw, unsigned char isEnable) {
 
 
 /* ISR from device */
-
-/* 
-void vchar_hw_bh_task(unsigned long arg) {
+#if USE_INTERRUPT == ENABLE
+#if USE_STATIC_TASKLET == ENABLE || USE_DYNAMIC_TASKLET == ENABLE
+static void vchar_hw_bh_task(unsigned long arg) {
 	uint32_t* intr_cnt_p = (uint32_t*)arg;
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), *intr_cnt_p);
 }
-DECLARE_TASKLET(vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt); 
-*/
+#endif
 
-/*
-void vchar_hw_bh_task(struct work_struct* task) {
+
+#if USE_STATIC_WORKQUEUE == ENABLE || USE_CUSTOM_WORKQUEUE == ENABLE
+static void vchar_hw_bh_task(struct work_struct* task) {
 	printk(KERN_INFO "[Bottom-half task] [CPU %d] ... \n", smp_processor_id());
 }
 DECLARE_WORK(vchar_static_work, vchar_hw_bh_task);
-*/
+DECLARE_DELAYED_WORK(vchar_static_delayed_work, vchar_hw_bh_task);
+#endif
 
-/*
-irqreturn_t vchar_hw_isr(int irq, void* dev) {
+
+static irqreturn_t vchar_hw_isr(int irq, void* dev) {
 	// ----------------- top-half task
 	vchar_drv.intr_cnt++;
 
 	// ----------------- bottom-half task
-
-	// tasklet_schedule(&vchar_static_tasklet);
-	// tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);	
-	
+#if USE_STATIC_TASKLET == ENABLE
+	tasklet_schedule(&vchar_drv.vchar_static_tasklet);
+#elif USE_DYNAMIC_TASKLET == ENABLE
+	tasklet_schedule(vchar_drv.vchar_dynamic_tasklet);
+#elif USE_STATIC_WORKQUEUE == ENABLE
 	// -------- default workqueue
-	// schedule_work_on(0, &vchar_static_work);
-	// schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);
-
+	schedule_work_on(0, &vchar_static_work);
+	schedule_delayed_work_on(1, &vchar_static_delayed_work, 2*HZ);
+#elif USE_CUSTOM_WORKQUEUE == ENABLE
 	// -------- user-defined workqueue
-	//queue_work_on(0, vchar_drv.vchar_user_workqueue, &vchar_static_work);
-	//queue_delayed_work_on(1, vchar_drv.vchar_user_workqueue, &vchar_static_delayed_work, 5*HZ);
-
+	queue_work_on(0, vchar_drv.vchar_user_workqueue, &vchar_static_work);
+	queue_delayed_work_on(1, vchar_drv.vchar_user_workqueue, &vchar_static_delayed_work, 2*HZ);
+#endif
+	
 	return IRQ_HANDLED;
 }
-*/
+#endif
 #pragma endregion
 
 
@@ -646,15 +660,18 @@ static const struct proc_ops proc_fops = {
 #pragma region handle, config kernel timer and send interrupt signal
 #if USE_TIMER == ENABLE
 static void handle_timer(struct timer_list* ktimer) {
+#if USE_INTERRUPT == ENABLE
+	// ISA_IRQ_VECTOR(IRQ_NUMBER) = (((0x20 + 16) & ~15) + IRQ_NUMBER) = 0x32 
+	asm("int $0x32");			// send intr signal
+	printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
+#else
 	vchar_ktimer_data_t *pData = from_timer(pData, ktimer, timer);
 	++pData->param1;
 	--pData->param2;
 	printk(KERN_INFO "[Kernel timer] Pairs of opposite natural numbers: %d & %d\n", pData->param1, pData->param2);
+#endif
 
-	// asm("int $0x3B");	// send intr signal, IRQ line 11 ~~ vector 0x3B
-	// printk(KERN_INFO "[Top-half task] [CPU %d] interrupt counter: %d\n", smp_processor_id(), vchar_drv.intr_cnt);
-
-	mod_timer(&vchar_drv.vchar_ktimer.timer, jiffies + msecs_to_jiffies(2000)); // callback after 2 seconds
+	mod_timer(&vchar_drv.vchar_ktimer.timer, jiffies + msecs_to_jiffies(5000)); // callback after n seconds
 }
 #endif
 #pragma endregion
@@ -735,16 +752,19 @@ static int __init vchar_driver_init(void)
 #endif
 
 	/* register ISR */
-	/*
+#if USE_INTERRUPT == ENABLE
 	ret = request_irq(IRQ_NUMBER, vchar_hw_isr, IRQF_SHARED, DEVICE_FILE, (void*)&vchar_drv.vcdev);
 	if (ret) {
 		printk(KERN_ERR "Failed to register ISR\n");
 		goto failed_create_proc;
 	}
-	*/
+#endif
 
+	/* bottom-half task */
+#if USE_STATIC_TASKLET == ENABLE
+	tasklet_init(&vchar_drv.vchar_static_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
+#elif USE_DYNAMIC_TASKLET == ENABLE
 	/* create tasklet dynamically for bottom-half task */
-	/*
 	vchar_drv.vchar_dynamic_tasklet = kzalloc(sizeof(struct tasklet_struct), GFP_KERNEL);
 	if (!vchar_drv.vchar_dynamic_tasklet) {
 		printk(KERN_ERR "Failed to allocate memory for tasklet\n");
@@ -752,17 +772,15 @@ static int __init vchar_driver_init(void)
 		goto failed_create_tasklet;
 	}
 	tasklet_init(vchar_drv.vchar_dynamic_tasklet, vchar_hw_bh_task, (unsigned long)&vchar_drv.intr_cnt);
-	*/
-	
+#elif USE_CUSTOM_WORKQUEUE == ENABLE
 	/* create user-defined workqueue */
-	/*
 	vchar_drv.vchar_user_workqueue = create_workqueue("vchar_workqueue");
 	if (!vchar_drv.vchar_user_workqueue) {
 		printk(KERN_ERR "Failed to create workqueue\n");
 		ret = -1;		
 		goto failed_create_workqueue;
 	}
-	*/
+#endif
 
 	/* init sync mechanism */
 #if USE_SPINLOCK == ENABLE
@@ -782,11 +800,17 @@ static int __init vchar_driver_init(void)
 	printk(KERN_INFO "Initialize virtual character driver successfully\n");
 	return 0;
 
-//failed_create_workqueue:
-//failed_create_tasklet:
-//free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
-	cdev_del(vchar_drv.vcdev);
+#if USE_CUSTOM_WORKQUEUE == ENABLE == ENABLE
+	failed_create_workqueue:
+#endif
+#if USE_DYNAMIC_TASKLET == ENABLE
+	failed_create_tasklet:
+#endif
+#if USE_INTERRUPT == ENABLE
+	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
+#endif
 failed_create_proc:
+	cdev_del(vchar_drv.vcdev);
 failed_alloc_cdev:
 	vchar_hw_exit(vchar_drv.vchar_hw);
 failed_init_hw:
@@ -811,16 +835,21 @@ static void __exit vchar_driver_exit(void)
 	if (vchar_drv.vchar_ioport)
 		release_region(VCHAR_IOPORT_BASE, VCHAR_IOPORT_LENGTH);
 
+#if USE_INTERRUPT == ENABLE		
 	/* unregister ISR */
-	//tasklet_kill(&vchar_static_tasklet);
-	//tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
-	/*
+#if USE_STATIC_TASKLET == ENABLE
+	tasklet_kill(&vchar_drv.vchar_static_tasklet);
+#elif USE_DYNAMIC_TASKLET == ENABLE
+	tasklet_kill(vchar_drv.vchar_dynamic_tasklet);
+#elif USE_STATIC_WORKQUEUE == ENABLE || USE_CUSTOM_WORKQUEUE == ENABLE
 	cancel_work_sync(&vchar_static_work);
 	cancel_delayed_work_sync(&vchar_static_delayed_work);
+#endif
+#if USE_CUSTOM_WORKQUEUE == ENABLE
 	destroy_workqueue(vchar_drv.vchar_user_workqueue);
-
+#endif
 	free_irq(IRQ_NUMBER, &vchar_drv.vcdev);
-	*/
+#endif
 
 	/* remove kernel timer */
 #if USE_TIMER == ENABLE
