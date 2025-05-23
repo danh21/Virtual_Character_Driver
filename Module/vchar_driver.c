@@ -46,6 +46,7 @@
 #define DRIVER_VERSION "3.0"
 
 #define DEVICE_FILE "vchar_dev"
+#define DEVICE_PROC "vchar_proc"
 
 #define MAGIC_NUM 21														// ID of driver
 #define VCHAR_CLR_DATA_REGS 			_IO (MAGIC_NUM, 0)
@@ -57,8 +58,6 @@
 #define VCHAR_RESET_DATA_IN_CRITICAL_RESOURCE	_IO (MAGIC_NUM, 6)
 
 #define IRQ_NUMBER 2
-
-#define OBJ_LOOKASIDE_SIZE (NUM_DATA_REGS * REG_SIZE)
 
 #define VCHAR_IOPORT_BASE	0x30
 #define VCHAR_IOPORT_LENGTH 	16											// 0x30 -> 0x3F
@@ -739,7 +738,7 @@ static int __init vchar_driver_init(void)
 	}
 
 	/* Create file /proc/vchar_proc */
-	if (proc_create("vchar_proc", 666, NULL, &proc_fops) == NULL) {
+	if (proc_create(DEVICE_PROC, 666, NULL, &proc_fops) == NULL) {
 		printk(KERN_ERR "Failed to create file in procfs\n");
 		ret = -1;
 		goto failed_create_proc;
@@ -857,7 +856,7 @@ static void __exit vchar_driver_exit(void)
 #endif
 	
 	/* remove file /proc/vchar_proc */
-	remove_proc_entry("vchar_proc", NULL);
+	remove_proc_entry(DEVICE_PROC, NULL);
 
 	/* unregister entry point with kernel */
 	cdev_del(vchar_drv.vcdev);
