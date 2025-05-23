@@ -1,5 +1,5 @@
 all:
-	cc -o testStrace testStrace.c
+	cc -o debugging debugging.c
 
 clean:
-	rm testStrace
+	rm debugging
