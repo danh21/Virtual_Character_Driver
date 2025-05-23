@@ -1,8 +1,12 @@
+# ignore files not having extension
+* 
+!*/ 
+!*.* 
+
 **/*.o
 **/*.ko
 **/*.cmd
 **/*.symvers
 **/*.order
 **/*.mod*
-**/[^.]*
 .vscode/
