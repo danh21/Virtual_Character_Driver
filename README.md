@@ -75,7 +75,10 @@
   - To check critical resource data: $ ./display_CR
   - To reset critical resource data to 0: $ ./reset_CR
   - To change other mechanisms, config enable one of ATOMIC, MUTEX, SPINLOCK, SEMAPHORE
-- To test **strace** utility for debugging:
+- To debug sample app to test driver using **strace** utility:
   - Open terminal at Strace/
   - $ make
-  - $ strace testStrace
+  - $ strace ./debugging
+- To test operation related to procfs:
+  - $ sudo chmod 777 /proc/vchar_proc
+  - $ cat /proc/vchar_proc
